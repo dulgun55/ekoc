@@ -14,6 +14,17 @@
       color: #f8fafc;
     }
 
+    #camera-feed {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      display: none;
+      background: #000000;
+    }
+
     #status {
       position: fixed;
       left: 12px;
@@ -47,9 +58,16 @@
       opacity: 0.55;
     }
 
+    #scene {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
   </style>
 </head>
 <body>
+  <video id="camera-feed" autoplay playsinline muted></video>
   <button id="enter-ar" type="button">Start AR</button>
   <div id="status">Status: Start AR дарж камер асаана. Гадаргуу илрэхээр дэлгэц дээр дарж объект байрлуулна.</div>
 
@@ -90,10 +108,12 @@
   <script>
     const statusEl = document.querySelector("#status");
     const sceneEl = document.querySelector("#scene");
+    const cameraFeedEl = document.querySelector("#camera-feed");
     const enterArBtn = document.querySelector("#enter-ar");
     const camEl = document.querySelector("#cam");
     const reticleEl = document.querySelector("#reticle");
     const mainModel = document.querySelector("#mainModel");
+    let previewStream = null;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
@@ -120,6 +140,27 @@
       );
 
       setStatus(message);
+    }
+
+    async function startCameraPreview() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus("Камер нээх боломжгүй: browser camera API дэмжихгүй байна.");
+        return false;
+      }
+
+      try {
+        previewStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+        cameraFeedEl.srcObject = previewStream;
+        cameraFeedEl.style.display = "block";
+        await cameraFeedEl.play();
+        return true;
+      } catch (error) {
+        setStatus(`Камер зөвшөөрөл/нээлт амжилтгүй: ${error.message}`);
+        return false;
+      }
     }
 
     AFRAME.registerComponent("ar-session-handler", {
@@ -205,14 +246,18 @@
       }
     });
 
-    // iPhone/iPad дээр AR mode-ийн оронд browser preview горим ашиглана.
-    if (isIOSDevice()) {
-      enableBrowserPreview("iPhone дээр browser preview горим ачааллаа.");
+    if (isIOSDevice() || !navigator.xr) {
+      enterArBtn.textContent = "Start Camera Preview";
+      setStatus("AR дэмжихгүй тул Start Camera Preview дарж camera + 3D preview ачаална.");
     }
 
     enterArBtn.addEventListener("click", async () => {
       if (!navigator.xr) {
-        enableBrowserPreview("WebXR дэмжихгүй тул browser preview горим руу шилжлээ.");
+        const cameraStarted = await startCameraPreview();
+        if (!cameraStarted) {
+          return;
+        }
+        enableBrowserPreview("Камер болон browser preview горим ачааллаа.");
         return;
       }
 
