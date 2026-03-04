@@ -1,28 +1,18 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="mn">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lab 4 - AR Surface Placement</title>
+  <title>Lab 4 - Marker AR (iPhone Safari)</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
     body {
       margin: 0;
       overflow: hidden;
       font-family: "Segoe UI", sans-serif;
-      background: #0d1117;
+      background: #0b1020;
       color: #f8fafc;
-    }
-
-    #camera-feed {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: 0;
-      display: none;
-      background: #000000;
     }
 
     #status {
@@ -40,10 +30,11 @@
 
     #controls {
       position: fixed;
-      right: 12px;
       top: 12px;
+      left: 12px;
       z-index: 20;
-      display: none;
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       align-items: center;
       padding: 10px 12px;
@@ -51,439 +42,135 @@
       background: rgba(0, 0, 0, 0.58);
       border: 1px solid rgba(255, 255, 255, 0.28);
       font-size: 13px;
+      max-width: min(96vw, 820px);
     }
 
-    #scale-range {
-      width: 120px;
-    }
-
-    #reset-place {
+    .ctrl-btn {
       border: 0;
       border-radius: 8px;
       padding: 7px 10px;
       background: #e2e8f0;
-      color: #0f172a;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    #move-toggle {
-      border: 0;
-      border-radius: 8px;
-      padding: 7px 10px;
-      background: #f59e0b;
       color: #111827;
       font-weight: 700;
       cursor: pointer;
     }
 
-    #enter-ar {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      z-index: 20;
-      border: 0;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 14px;
-      background: #22c55e;
-      color: #04130a;
-      font-weight: 700;
-      cursor: pointer;
+    #scale-range {
+      width: 140px;
     }
-
-    #enter-ar:disabled {
-      cursor: not-allowed;
-      opacity: 0.55;
-    }
-
-    #scene {
-      position: fixed;
-      inset: 0;
-      z-index: 1;
-    }
-
   </style>
 </head>
 <body>
-  <video id="camera-feed" autoplay playsinline muted></video>
-  <button id="enter-ar" type="button">Start AR</button>
   <div id="controls">
+    <button class="ctrl-btn" id="move-left" type="button">Left</button>
+    <button class="ctrl-btn" id="move-right" type="button">Right</button>
+    <button class="ctrl-btn" id="move-forward" type="button">Forward</button>
+    <button class="ctrl-btn" id="move-back" type="button">Back</button>
     <label for="scale-range">Size</label>
     <input id="scale-range" type="range" min="0.2" max="1.2" step="0.05" value="0.45" />
-    <button id="move-toggle" type="button">Move: OFF</button>
-    <button id="reset-place" type="button">Reset</button>
+    <button class="ctrl-btn" id="reset" type="button">Reset</button>
   </div>
-  <div id="status">Status: Start AR дарж камер асаана. Гадаргуу илрэхээр дэлгэц дээр дарж объект байрлуулна.</div>
+
+  <div id="status">Status: Camera ?????????? Hiro marker ??? ????????? ??.</div>
 
   <a-scene
     id="scene"
-    color-space="sRGB"
-    renderer="colorManagement: true, physicallyCorrectLights, alpha: true"
-    webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: body;"
+    embedded
     vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: false"
-    ar-session-handler
+    renderer="logarithmicDepthBuffer: true; colorManagement: true"
+    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
   >
     <a-assets>
       <a-asset-item id="ekocModel" src="ekoc.glb"></a-asset-item>
     </a-assets>
 
-    <a-camera id="cam" position="0 1.6 0" look-controls="enabled:false"></a-camera>
+    <a-marker id="marker" preset="hiro" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+      <a-entity id="modelRoot" position="0 0 0" rotation="0 0 0">
+        <a-gltf-model id="mainModel" src="#ekocModel" position="0 0 0" scale="0.45 0.45 0.45"></a-gltf-model>
+        <a-circle id="modelShadow" position="0 0.01 0" rotation="-90 0 0" radius="0.28" material="color: #000000; opacity: 0.25; shader: flat"></a-circle>
+      </a-entity>
+    </a-marker>
 
-    <a-entity
-      id="reticle"
-      visible="false"
-      geometry="primitive: ring; radiusInner: 0.07; radiusOuter: 0.09"
-      material="color: #00e676; shader: flat; opacity: 0.9"
-      rotation="-90 0 0"
-    ></a-entity>
-
-    <a-gltf-model
-      id="mainModel"
-      src="#ekocModel"
-      visible="false"
-      scale="0.45 0.45 0.45"
-    ></a-gltf-model>
-
-    <a-circle
-      id="modelShadow"
-      visible="false"
-      rotation="-90 0 0"
-      radius="0.28"
-      material="color: #000000; opacity: 0.25; shader: flat"
-    ></a-circle>
-
+    <a-entity camera></a-entity>
     <a-light type="ambient" intensity="0.95"></a-light>
     <a-light type="directional" intensity="0.7" position="0 1 1"></a-light>
   </a-scene>
 
   <script>
     const statusEl = document.querySelector("#status");
-    const sceneEl = document.querySelector("#scene");
-    const cameraFeedEl = document.querySelector("#camera-feed");
-    const enterArBtn = document.querySelector("#enter-ar");
-    const controlsEl = document.querySelector("#controls");
-    const scaleRangeEl = document.querySelector("#scale-range");
-    const moveToggleEl = document.querySelector("#move-toggle");
-    const resetPlaceEl = document.querySelector("#reset-place");
-    const camEl = document.querySelector("#cam");
-    const reticleEl = document.querySelector("#reticle");
+    const markerEl = document.querySelector("#marker");
+    const modelRoot = document.querySelector("#modelRoot");
     const mainModel = document.querySelector("#mainModel");
     const modelShadow = document.querySelector("#modelShadow");
-    let previewStream = null;
-    let nonXRPlacementMode = false;
-    let nonXRPointerBound = false;
-    let currentModelScale = Number(scaleRangeEl.value);
-    const reticleSmoothPos = new THREE.Vector3();
-    let hasReticleSmoothPos = false;
-    let modelBaseOffset = 0;
-    let modelMoveMode = false;
-    let draggingModel = false;
+    const scaleRangeEl = document.querySelector("#scale-range");
+
+    const step = 0.05;
+    let modelScale = Number(scaleRangeEl.value);
+    let yaw = 0;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
     }
 
-    function setCameraLookControls(enabled) {
-      camEl.setAttribute("look-controls", `enabled:${enabled}`);
+    function applyScale(value) {
+      modelScale = value;
+      mainModel.setAttribute("scale", `${value} ${value} ${value}`);
+      modelShadow.setAttribute("radius", Math.max(0.18, value * 0.65));
     }
 
-    function updateMoveButton() {
-      moveToggleEl.textContent = modelMoveMode ? "Move: ON" : "Move: OFF";
-      moveToggleEl.style.background = modelMoveMode ? "#22c55e" : "#f59e0b";
+    function move(dx, dz) {
+      const p = modelRoot.getAttribute("position");
+      modelRoot.setAttribute("position", `${p.x + dx} ${p.y} ${p.z + dz}`);
+      setStatus("Model marker ???? ????????.");
     }
 
-    function isIOSDevice() {
-      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    }
+    document.querySelector("#move-left").addEventListener("click", () => move(-step, 0));
+    document.querySelector("#move-right").addEventListener("click", () => move(step, 0));
+    document.querySelector("#move-forward").addEventListener("click", () => move(0, -step));
+    document.querySelector("#move-back").addEventListener("click", () => move(0, step));
 
-    function enableBrowserPreview(message) {
-      enterArBtn.style.display = "none";
-      controlsEl.style.display = "flex";
-      nonXRPlacementMode = true;
-      reticleEl.setAttribute("visible", true);
-
-      setCameraLookControls(true);
-      camEl.setAttribute("wasd-controls", "enabled:false");
-
-      mainModel.removeAttribute("animation__spin");
-      mainModel.setAttribute("visible", false);
-      modelShadow.setAttribute("visible", false);
-      reticleEl.setAttribute("position", "0 0 -1.5");
-
-      setStatus(message);
-      bindNonXRPlacementEvents();
-      modelMoveMode = false;
-      updateMoveButton();
-    }
-
-    async function startCameraPreview() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus("Камер нээх боломжгүй: browser camera API дэмжихгүй байна.");
-        return false;
-      }
-
-      try {
-        previewStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false
-        });
-        cameraFeedEl.srcObject = previewStream;
-        cameraFeedEl.style.display = "block";
-        await cameraFeedEl.play();
-        return true;
-      } catch (error) {
-        setStatus(`Камер зөвшөөрөл/нээлт амжилтгүй: ${error.message}`);
-        return false;
-      }
-    }
-
-    function getGroundIntersection(clientX, clientY) {
-      const cameraObj = camEl.getObject3D("camera");
-      if (!cameraObj) return null;
-
-      const ndc = new THREE.Vector2(
-        (clientX / window.innerWidth) * 2 - 1,
-        -((clientY / window.innerHeight) * 2 - 1)
-      );
-
-      const origin = new THREE.Vector3();
-      origin.setFromMatrixPosition(cameraObj.matrixWorld);
-
-      const point = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(cameraObj);
-      const direction = point.sub(origin).normalize();
-      if (Math.abs(direction.y) < 0.0001) return null;
-
-      const t = (0 - origin.y) / direction.y;
-      if (t <= 0) return null;
-
-      return origin.clone().add(direction.multiplyScalar(t));
-    }
-
-    function applyModelScale(scaleValue) {
-      currentModelScale = scaleValue;
-      mainModel.setAttribute("scale", `${scaleValue} ${scaleValue} ${scaleValue}`);
-      const shadowRadius = Math.max(0.18, scaleValue * 0.65);
-      modelShadow.setAttribute("radius", shadowRadius);
-    }
-
-    function placeModelOnSurface(surfacePos, surfaceQuat) {
-      const quat = surfaceQuat || new THREE.Quaternion(0, 0, 0, 1);
-      const lift = new THREE.Vector3(0, modelBaseOffset * currentModelScale, 0).applyQuaternion(quat);
-      const placedPos = surfacePos.clone().add(lift);
-
-      mainModel.object3D.position.copy(placedPos);
-      mainModel.object3D.quaternion.copy(quat);
-      mainModel.setAttribute("visible", true);
-      modelShadow.object3D.position.set(surfacePos.x, Math.max(0.01, surfacePos.y + 0.01), surfacePos.z);
-      modelShadow.setAttribute("visible", true);
-    }
-
-    function bindNonXRPlacementEvents() {
-      if (nonXRPointerBound) return;
-      nonXRPointerBound = true;
-
-      window.addEventListener("pointermove", (event) => {
-        if (!nonXRPlacementMode) return;
-        if (!modelMoveMode && !draggingModel) return;
-        const hit = getGroundIntersection(event.clientX, event.clientY);
-        if (!hit) {
-          reticleEl.setAttribute("visible", false);
-          return;
-        }
-
-        reticleEl.setAttribute("visible", true);
-        if (!hasReticleSmoothPos) {
-          reticleSmoothPos.copy(hit);
-          hasReticleSmoothPos = true;
-        } else {
-          reticleSmoothPos.lerp(hit, 0.25);
-        }
-        reticleEl.object3D.position.copy(reticleSmoothPos);
-
-        if (draggingModel) {
-          placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
-        }
-      });
-
-      window.addEventListener("pointerdown", (event) => {
-        if (!nonXRPlacementMode) return;
-        if (!modelMoveMode) return;
-        const hit = getGroundIntersection(event.clientX, event.clientY);
-        if (!hit) {
-          setStatus("Гадаргуу таарсангүй. Камераа доош чиглүүлээд дахин дарна уу.");
-          return;
-        }
-
-        draggingModel = true;
-        setCameraLookControls(false);
-        placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
-        setStatus("Move mode: Дэлгэц дээр чирж model-ийг зөөнө.");
-      });
-
-      window.addEventListener("pointerup", () => {
-        if (!nonXRPlacementMode || !draggingModel) return;
-        draggingModel = false;
-        setCameraLookControls(true);
-        modelMoveMode = false;
-        updateMoveButton();
-        setStatus("Model зөөгдлөө. Move OFF боллоо, одоо camera-г эргүүлж тойрч харж болно.");
-      });
-    }
-
-    AFRAME.registerComponent("ar-session-handler", {
-      init: function () {
-        this.hitTestSource = null;
-        this.referenceSpace = null;
-        this.viewerSpace = null;
-        this.renderer = null;
-        this.session = null;
-        this.hasSurface = false;
-
-        this.onSessionStart = this.onSessionStart.bind(this);
-        this.onSessionEnd = this.onSessionEnd.bind(this);
-        this.onSelect = this.onSelect.bind(this);
-
-        this.el.addEventListener("renderstart", () => {
-          this.renderer = this.el.renderer;
-          this.renderer.xr.addEventListener("sessionstart", this.onSessionStart);
-          this.renderer.xr.addEventListener("sessionend", this.onSessionEnd);
-        });
-      },
-
-      onSessionStart: async function () {
-        this.session = this.renderer.xr.getSession();
-        this.referenceSpace = this.renderer.xr.getReferenceSpace();
-        this.viewerSpace = await this.session.requestReferenceSpace("viewer");
-        this.hitTestSource = await this.session.requestHitTestSource({ space: this.viewerSpace });
-        this.session.addEventListener("select", this.onSelect);
-        setStatus("Камер аслаа. Гадаргуу хайж байна...");
-      },
-
-      onSessionEnd: function () {
-        if (this.hitTestSource) {
-          this.hitTestSource.cancel();
-          this.hitTestSource = null;
-        }
-        this.viewerSpace = null;
-        this.referenceSpace = null;
-        this.session = null;
-        this.hasSurface = false;
-        reticleEl.setAttribute("visible", false);
-        setStatus("AR session дууслаа.");
-      },
-
-      onSelect: function () {
-        if (!reticleEl.getAttribute("visible")) {
-          return;
-        }
-
-        const worldPos = new THREE.Vector3();
-        const worldQuat = new THREE.Quaternion();
-        reticleEl.object3D.getWorldPosition(worldPos);
-        reticleEl.object3D.getWorldQuaternion(worldQuat);
-
-        placeModelOnSurface(worldPos, worldQuat);
-        setStatus("Объект сууриараа байрлалаа. Дахин дарвал шинэ байрлалд шилжинэ.");
-      },
-
-      tick: function (time, delta, xrFrame) {
-        if (!xrFrame || !this.hitTestSource || !this.referenceSpace) {
-          return;
-        }
-
-        const hits = xrFrame.getHitTestResults(this.hitTestSource);
-        if (!hits.length) {
-          if (this.hasSurface) {
-            this.hasSurface = false;
-            setStatus("Гадаргуу хайж байна...");
-          }
-          reticleEl.setAttribute("visible", false);
-          return;
-        }
-
-        const pose = hits[0].getPose(this.referenceSpace);
-        if (!pose) {
-          reticleEl.setAttribute("visible", false);
-          return;
-        }
-
-        if (!this.hasSurface) {
-          this.hasSurface = true;
-          setStatus("Гадаргуу илэрлээ. Дэлгэц дээр дарж объектоо байрлуулна.");
-        }
-
-        reticleEl.setAttribute("visible", true);
-        reticleEl.object3D.matrix.fromArray(pose.transform.matrix);
-        reticleEl.object3D.matrix.decompose(
-          reticleEl.object3D.position,
-          reticleEl.object3D.quaternion,
-          reticleEl.object3D.scale
-        );
-      }
-    });
-
-    if (isIOSDevice() || !navigator.xr) {
-      enterArBtn.textContent = "Start Camera Preview";
-      setStatus("AR дэмжихгүй тул Start Camera Preview дарж camera + 3D preview ачаална.");
-    }
-
-    enterArBtn.addEventListener("click", async () => {
-      if (!navigator.xr) {
-        const cameraStarted = await startCameraPreview();
-        if (!cameraStarted) {
-          return;
-        }
-        enableBrowserPreview("Камер аслаа. Эхлээд Move ON дарж model-ээ байрлуулаад, дараа нь camera-г эргүүлж тойрч харна.");
-        return;
-      }
-
-      try {
-        await sceneEl.enterAR();
-      } catch (error) {
-        setStatus(`AR эхлүүлэхэд алдаа гарлаа: ${error.message}`);
-      }
+    document.querySelector("#reset").addEventListener("click", () => {
+      modelRoot.setAttribute("position", "0 0 0");
+      yaw = 0;
+      modelRoot.setAttribute("rotation", "0 0 0");
+      setStatus("Model ??????? reset ????????.");
     });
 
     scaleRangeEl.addEventListener("input", () => {
-      applyModelScale(Number(scaleRangeEl.value));
+      applyScale(Number(scaleRangeEl.value));
     });
 
-    moveToggleEl.addEventListener("click", () => {
-      modelMoveMode = !modelMoveMode;
-      updateMoveButton();
-
-      if (!modelMoveMode) {
-        draggingModel = false;
-        setCameraLookControls(true);
-        setStatus("Move OFF. Одоо camera-г эргүүлэхэд model байрандаа үлдэнэ.");
-        return;
-      }
-
-      reticleEl.setAttribute("visible", true);
-      setStatus("Move ON. Дэлгэц дээр дарж/чирж model-ийг шинэ байрлалд тавина.");
+    markerEl.addEventListener("markerFound", () => {
+      setStatus("Marker ?????????. ???? ?? ????? ???????? model-?? 3D ???? ?????.");
     });
 
-    resetPlaceEl.addEventListener("click", () => {
-      mainModel.setAttribute("visible", false);
-      modelShadow.setAttribute("visible", false);
-      setStatus("Reset хийлээ. Move ON асаагаад model-ээ байрлуулна уу.");
+    markerEl.addEventListener("markerLost", () => {
+      setStatus("Marker ?????????. Hiro marker-?? ????? ??????? ???? ??????? ??.");
+    });
+
+    let dragging = false;
+    let prevX = 0;
+
+    window.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      prevX = e.clientX;
+    });
+
+    window.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - prevX;
+      prevX = e.clientX;
+      yaw += dx * 0.2;
+      modelRoot.setAttribute("rotation", `0 ${yaw} 0`);
+    });
+
+    window.addEventListener("pointerup", () => {
+      dragging = false;
     });
 
     mainModel.addEventListener("model-loaded", () => {
-      const mesh = mainModel.getObject3D("mesh");
-      if (mesh) {
-        const box = new THREE.Box3().setFromObject(mesh);
-        modelBaseOffset = Math.max(0, -box.min.y);
-      }
-      applyModelScale(currentModelScale);
-      if (enterArBtn.style.display === "none") {
-        setStatus("Model ачааллаа. Browser preview горим идэвхтэй.");
-      } else {
-        setStatus("Model ачааллаа. Start AR дарна уу.");
-      }
+      applyScale(modelScale);
+      setStatus("Model ????????. ????? ?????????? Hiro marker ??? ????????? ??.");
     });
   </script>
 </body>
