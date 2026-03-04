@@ -47,27 +47,10 @@
       opacity: 0.55;
     }
 
-    #ios-ar-link {
-      display: none;
-      position: fixed;
-      top: 12px;
-      right: 12px;
-      z-index: 20;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 14px;
-      background: #0ea5e9;
-      color: #ffffff;
-      font-weight: 700;
-      text-decoration: none;
-    }
   </style>
 </head>
 <body>
   <button id="enter-ar" type="button">Start AR</button>
-  <a id="ios-ar-link" rel="ar" href="ekoc.usdz">
-    Open in iPhone AR
-  </a>
   <div id="status">Status: Start AR дарж камер асаана. Гадаргуу илрэхээр дэлгэц дээр дарж объект байрлуулна.</div>
 
   <a-scene
@@ -108,7 +91,7 @@
     const statusEl = document.querySelector("#status");
     const sceneEl = document.querySelector("#scene");
     const enterArBtn = document.querySelector("#enter-ar");
-    const iosArLink = document.querySelector("#ios-ar-link");
+    const camEl = document.querySelector("#cam");
     const reticleEl = document.querySelector("#reticle");
     const mainModel = document.querySelector("#mainModel");
 
@@ -121,14 +104,22 @@
         (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     }
 
-    function supportsQuickLook() {
-      const a = document.createElement("a");
-      return !!(a.relList && a.relList.supports && a.relList.supports("ar"));
-    }
+    function enableBrowserPreview(message) {
+      enterArBtn.style.display = "none";
+      reticleEl.setAttribute("visible", false);
 
-    function isSafariBrowser() {
-      const ua = navigator.userAgent;
-      return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+      camEl.setAttribute("look-controls", "enabled:true");
+      camEl.setAttribute("wasd-controls", "enabled:false");
+
+      mainModel.setAttribute("visible", true);
+      mainModel.setAttribute("position", "0 1.2 -2");
+      mainModel.setAttribute("rotation", "0 35 0");
+      mainModel.setAttribute(
+        "animation__spin",
+        "property: rotation; to: 0 395 0; loop: true; dur: 10000; easing: linear"
+      );
+
+      setStatus(message);
     }
 
     AFRAME.registerComponent("ar-session-handler", {
@@ -214,30 +205,14 @@
       }
     });
 
-    // iPhone/iPad дээр WebXR байхгүй тул AR Quick Look товчийг урьдчилж харуулна.
+    // iPhone/iPad дээр AR mode-ийн оронд browser preview горим ашиглана.
     if (isIOSDevice()) {
-      iosArLink.style.display = "inline-block";
-      if (!isSafariBrowser()) {
-        setStatus("iPhone дээр AR Quick Look ашиглахын тулд энэ хуудсыг Safari дээр нээгээд Open in iPhone AR дарна уу.");
-      } else {
-        setStatus("iPhone дээр WebXR дэмжихгүй. Open in iPhone AR товчоор AR Quick Look нээнэ үү.");
-      }
+      enableBrowserPreview("iPhone дээр browser preview горим ачааллаа.");
     }
 
     enterArBtn.addEventListener("click", async () => {
       if (!navigator.xr) {
-        if (isIOSDevice()) {
-          iosArLink.style.display = "inline-block";
-          if (!isSafariBrowser()) {
-            setStatus("Safari дээр нээгээд Open in iPhone AR дарна уу. Одоогийн browser AR Quick Look-ийг бүрэн дэмжихгүй.");
-          } else if (!supportsQuickLook()) {
-            setStatus("Safari дээр AR Quick Look шалгалт амжилтгүй байна. iOS шинэчлээд дахин оролдоно уу.");
-          } else {
-            setStatus("iPhone дээр WebXR дэмжихгүй. Open in iPhone AR товчоор AR Quick Look нээнэ үү.");
-          }
-        } else {
-          setStatus("Энэ төхөөрөмж WebXR AR дэмжихгүй байна.");
-        }
+        enableBrowserPreview("WebXR дэмжихгүй тул browser preview горим руу шилжлээ.");
         return;
       }
 
@@ -249,7 +224,11 @@
     });
 
     mainModel.addEventListener("model-loaded", () => {
-      setStatus("Model ачааллаа. Start AR дарна уу.");
+      if (enterArBtn.style.display === "none") {
+        setStatus("Model ачааллаа. Browser preview горим идэвхтэй.");
+      } else {
+        setStatus("Model ачааллаа. Start AR дарна уу.");
+      }
     });
   </script>
 </body>
