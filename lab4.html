@@ -98,7 +98,7 @@
       id="mainModel"
       src="#ekocModel"
       visible="false"
-      scale="0.15 0.15 0.15"
+      scale="0.3 0.3 0.3"
     ></a-gltf-model>
 
     <a-light type="ambient" intensity="0.95"></a-light>
@@ -114,6 +114,8 @@
     const reticleEl = document.querySelector("#reticle");
     const mainModel = document.querySelector("#mainModel");
     let previewStream = null;
+    let nonXRPlacementMode = false;
+    let nonXRPointerBound = false;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
@@ -126,20 +128,18 @@
 
     function enableBrowserPreview(message) {
       enterArBtn.style.display = "none";
-      reticleEl.setAttribute("visible", false);
+      nonXRPlacementMode = true;
+      reticleEl.setAttribute("visible", true);
 
       camEl.setAttribute("look-controls", "enabled:true");
       camEl.setAttribute("wasd-controls", "enabled:false");
 
-      mainModel.setAttribute("visible", true);
-      mainModel.setAttribute("position", "0 1.2 -2");
-      mainModel.setAttribute("rotation", "0 35 0");
-      mainModel.setAttribute(
-        "animation__spin",
-        "property: rotation; to: 0 395 0; loop: true; dur: 10000; easing: linear"
-      );
+      mainModel.removeAttribute("animation__spin");
+      mainModel.setAttribute("visible", false);
+      reticleEl.setAttribute("position", "0 0 -1.5");
 
       setStatus(message);
+      bindNonXRPlacementEvents();
     }
 
     async function startCameraPreview() {
@@ -163,6 +163,59 @@
       }
     }
 
+    function getGroundIntersection(clientX, clientY) {
+      const cameraObj = camEl.getObject3D("camera");
+      if (!cameraObj) return null;
+
+      const ndc = new THREE.Vector2(
+        (clientX / window.innerWidth) * 2 - 1,
+        -((clientY / window.innerHeight) * 2 - 1)
+      );
+
+      const origin = new THREE.Vector3();
+      origin.setFromMatrixPosition(cameraObj.matrixWorld);
+
+      const point = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(cameraObj);
+      const direction = point.sub(origin).normalize();
+      if (Math.abs(direction.y) < 0.0001) return null;
+
+      const t = (0 - origin.y) / direction.y;
+      if (t <= 0) return null;
+
+      return origin.clone().add(direction.multiplyScalar(t));
+    }
+
+    function bindNonXRPlacementEvents() {
+      if (nonXRPointerBound) return;
+      nonXRPointerBound = true;
+
+      window.addEventListener("pointermove", (event) => {
+        if (!nonXRPlacementMode) return;
+        const hit = getGroundIntersection(event.clientX, event.clientY);
+        if (!hit) {
+          reticleEl.setAttribute("visible", false);
+          return;
+        }
+
+        reticleEl.setAttribute("visible", true);
+        reticleEl.object3D.position.copy(hit);
+      });
+
+      window.addEventListener("pointerdown", (event) => {
+        if (!nonXRPlacementMode) return;
+        const hit = getGroundIntersection(event.clientX, event.clientY);
+        if (!hit) {
+          setStatus("Гадаргуу таарсангүй. Камераа доош чиглүүлээд дахин дарна уу.");
+          return;
+        }
+
+        mainModel.object3D.position.copy(hit);
+        mainModel.object3D.quaternion.set(0, 0, 0, 1);
+        mainModel.setAttribute("visible", true);
+        setStatus("Объект байрлалаа. Дахин дарж шинэ байрлалд шилжүүлж болно.");
+      });
+    }
+
     AFRAME.registerComponent("ar-session-handler", {
       init: function () {
         this.hitTestSource = null;
@@ -170,6 +223,7 @@
         this.viewerSpace = null;
         this.renderer = null;
         this.session = null;
+        this.hasSurface = false;
 
         this.onSessionStart = this.onSessionStart.bind(this);
         this.onSessionEnd = this.onSessionEnd.bind(this);
@@ -199,6 +253,7 @@
         this.viewerSpace = null;
         this.referenceSpace = null;
         this.session = null;
+        this.hasSurface = false;
         reticleEl.setAttribute("visible", false);
         setStatus("AR session дууслаа.");
       },
@@ -226,6 +281,10 @@
 
         const hits = xrFrame.getHitTestResults(this.hitTestSource);
         if (!hits.length) {
+          if (this.hasSurface) {
+            this.hasSurface = false;
+            setStatus("Гадаргуу хайж байна...");
+          }
           reticleEl.setAttribute("visible", false);
           return;
         }
@@ -234,6 +293,11 @@
         if (!pose) {
           reticleEl.setAttribute("visible", false);
           return;
+        }
+
+        if (!this.hasSurface) {
+          this.hasSurface = true;
+          setStatus("Гадаргуу илэрлээ. Дэлгэц дээр дарж объектоо байрлуулна.");
         }
 
         reticleEl.setAttribute("visible", true);
@@ -257,7 +321,7 @@
         if (!cameraStarted) {
           return;
         }
-        enableBrowserPreview("Камер болон browser preview горим ачааллаа.");
+        enableBrowserPreview("Камер аслаа. Дэлгэц дээр дарж объектоо гадаргуун дээр байрлуулна.");
         return;
       }
 
