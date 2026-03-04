@@ -211,6 +211,7 @@
     let objectDetectorPromise = null;
     let detectorRunning = false;
     let detectLastAt = 0;
+    let autoAttachToDetection = true;
 
     let currentModelScale = Number(scaleRangeEl.value);
     let modelBaseOffset = 0;
@@ -240,6 +241,80 @@
       detectorListEl.innerHTML = top
         .map((p) => `${p.class} (${Math.round(p.score * 100)}%)`)
         .join("<br>");
+
+      if (autoAttachToDetection) {
+        attachModelToPrediction(top[0]);
+      }
+    }
+
+    function estimateWorldPointFromScreen(screenX, screenY) {
+      const cameraObj = camEl.getObject3D("camera");
+      if (!cameraObj) return null;
+
+      const ndc = new THREE.Vector2(
+        (screenX / window.innerWidth) * 2 - 1,
+        -((screenY / window.innerHeight) * 2 - 1)
+      );
+
+      const origin = new THREE.Vector3();
+      origin.setFromMatrixPosition(cameraObj.matrixWorld);
+
+      const point = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(cameraObj);
+      const direction = point.sub(origin).normalize();
+
+      if (Math.abs(direction.y) > 0.0001) {
+        const tGround = (0 - origin.y) / direction.y;
+        if (tGround > 0) {
+          return origin.clone().add(direction.multiplyScalar(tGround));
+        }
+      }
+
+      return origin.add(direction.multiplyScalar(1.2));
+    }
+
+    function attachModelToPrediction(prediction) {
+      if (!prediction || !prediction.bbox || prediction.score < 0.7) return;
+      if (!nonXRPlacementMode) return;
+
+      const [x, y, width, height] = prediction.bbox;
+      const centerVideoX = x + width * 0.5;
+      const centerVideoY = y + height * 0.5;
+
+      const viewW = cameraFeedEl.clientWidth || window.innerWidth;
+      const viewH = cameraFeedEl.clientHeight || window.innerHeight;
+      const videoW = cameraFeedEl.videoWidth || viewW;
+      const videoH = cameraFeedEl.videoHeight || viewH;
+
+      const videoAspect = videoW / videoH;
+      const viewAspect = viewW / viewH;
+
+      let scale;
+      let drawW;
+      let drawH;
+      let offsetX;
+      let offsetY;
+
+      if (videoAspect > viewAspect) {
+        scale = viewH / videoH;
+        drawW = videoW * scale;
+        drawH = viewH;
+        offsetX = (viewW - drawW) * 0.5;
+        offsetY = 0;
+      } else {
+        scale = viewW / videoW;
+        drawW = viewW;
+        drawH = videoH * scale;
+        offsetX = 0;
+        offsetY = (viewH - drawH) * 0.5;
+      }
+
+      const centerX = offsetX + centerVideoX * scale;
+      const centerY = offsetY + centerVideoY * scale;
+      const worldPos = estimateWorldPointFromScreen(centerX, centerY);
+      if (!worldPos) return;
+
+      placeModelOnSurface(worldPos, new THREE.Quaternion(0, 0, 0, 1));
+      setStatus(`Attached to detected ${prediction.class}.`);
     }
 
     async function loadObjectDetector() {
