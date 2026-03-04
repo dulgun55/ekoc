@@ -3,16 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lab 4 - Marker AR (iPhone Safari)</title>
+  <title>Lab 4 - AR Surface Placement</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <style>
     body {
       margin: 0;
       overflow: hidden;
       font-family: "Segoe UI", sans-serif;
-      background: #0b1020;
+      background: #0d1117;
       color: #f8fafc;
+    }
+
+    #camera-feed {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      display: none;
+      background: #000;
+    }
+
+    #scene {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
     }
 
     #status {
@@ -28,12 +44,27 @@
       max-width: min(760px, 95vw);
     }
 
-    #controls {
+    #enter-ar {
       position: fixed;
       top: 12px;
       left: 12px;
       z-index: 20;
-      display: flex;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      background: #22c55e;
+      color: #04130a;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #controls {
+      position: fixed;
+      right: 12px;
+      top: 12px;
+      z-index: 20;
+      display: none;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
@@ -42,7 +73,7 @@
       background: rgba(0, 0, 0, 0.58);
       border: 1px solid rgba(255, 255, 255, 0.28);
       font-size: 13px;
-      max-width: min(96vw, 820px);
+      max-width: min(95vw, 760px);
     }
 
     .ctrl-btn {
@@ -50,127 +81,423 @@
       border-radius: 8px;
       padding: 7px 10px;
       background: #e2e8f0;
-      color: #111827;
+      color: #0f172a;
       font-weight: 700;
       cursor: pointer;
     }
 
+    #place-toggle {
+      background: #f59e0b;
+      color: #111827;
+    }
+
     #scale-range {
-      width: 140px;
+      width: 120px;
     }
   </style>
 </head>
 <body>
+  <video id="camera-feed" autoplay playsinline muted></video>
+  <button id="enter-ar" type="button">Start AR</button>
+
   <div id="controls">
-    <button class="ctrl-btn" id="move-left" type="button">Left</button>
-    <button class="ctrl-btn" id="move-right" type="button">Right</button>
-    <button class="ctrl-btn" id="move-forward" type="button">Forward</button>
-    <button class="ctrl-btn" id="move-back" type="button">Back</button>
     <label for="scale-range">Size</label>
     <input id="scale-range" type="range" min="0.2" max="1.2" step="0.05" value="0.45" />
-    <button class="ctrl-btn" id="reset" type="button">Reset</button>
+    <button class="ctrl-btn" id="place-toggle" type="button">Place: OFF</button>
+    <button class="ctrl-btn" id="nudge-left" type="button">Left</button>
+    <button class="ctrl-btn" id="nudge-right" type="button">Right</button>
+    <button class="ctrl-btn" id="nudge-forward" type="button">Forward</button>
+    <button class="ctrl-btn" id="nudge-back" type="button">Back</button>
+    <button class="ctrl-btn" id="rotate-left" type="button">Rotate -</button>
+    <button class="ctrl-btn" id="rotate-right" type="button">Rotate +</button>
+    <button class="ctrl-btn" id="reset-place" type="button">Reset</button>
   </div>
 
-  <div id="status">Status: Camera ?????????? Hiro marker ??? ????????? ??.</div>
+  <div id="status">Status: Press Start AR to begin.</div>
 
   <a-scene
     id="scene"
-    embedded
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights, alpha: true"
+    webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: body;"
     vr-mode-ui="enabled: false"
-    renderer="logarithmicDepthBuffer: true; colorManagement: true"
-    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+    device-orientation-permission-ui="enabled: false"
+    ar-session-handler
   >
     <a-assets>
       <a-asset-item id="ekocModel" src="ekoc.glb"></a-asset-item>
     </a-assets>
 
-    <a-marker id="marker" preset="hiro" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
-      <a-entity id="modelRoot" position="0 0 0" rotation="0 0 0">
-        <a-gltf-model id="mainModel" src="#ekocModel" position="0 0 0" scale="0.45 0.45 0.45"></a-gltf-model>
-        <a-circle id="modelShadow" position="0 0.01 0" rotation="-90 0 0" radius="0.28" material="color: #000000; opacity: 0.25; shader: flat"></a-circle>
-      </a-entity>
-    </a-marker>
+    <a-camera id="cam" position="0 1.6 0" look-controls="enabled:false"></a-camera>
 
-    <a-entity camera></a-entity>
+    <a-entity
+      id="reticle"
+      visible="false"
+      geometry="primitive: ring; radiusInner: 0.07; radiusOuter: 0.09"
+      material="color: #00e676; shader: flat; opacity: 0.9"
+      rotation="-90 0 0"
+    ></a-entity>
+
+    <a-gltf-model id="mainModel" src="#ekocModel" visible="false" scale="0.45 0.45 0.45"></a-gltf-model>
+
+    <a-circle
+      id="modelShadow"
+      visible="false"
+      rotation="-90 0 0"
+      radius="0.28"
+      material="color: #000000; opacity: 0.25; shader: flat"
+    ></a-circle>
+
     <a-light type="ambient" intensity="0.95"></a-light>
     <a-light type="directional" intensity="0.7" position="0 1 1"></a-light>
   </a-scene>
 
   <script>
     const statusEl = document.querySelector("#status");
-    const markerEl = document.querySelector("#marker");
-    const modelRoot = document.querySelector("#modelRoot");
+    const sceneEl = document.querySelector("#scene");
+    const cameraFeedEl = document.querySelector("#camera-feed");
+    const enterArBtn = document.querySelector("#enter-ar");
+    const controlsEl = document.querySelector("#controls");
+
+    const scaleRangeEl = document.querySelector("#scale-range");
+    const placeToggleEl = document.querySelector("#place-toggle");
+    const nudgeLeftEl = document.querySelector("#nudge-left");
+    const nudgeRightEl = document.querySelector("#nudge-right");
+    const nudgeForwardEl = document.querySelector("#nudge-forward");
+    const nudgeBackEl = document.querySelector("#nudge-back");
+    const rotateLeftEl = document.querySelector("#rotate-left");
+    const rotateRightEl = document.querySelector("#rotate-right");
+    const resetPlaceEl = document.querySelector("#reset-place");
+
+    const camEl = document.querySelector("#cam");
+    const reticleEl = document.querySelector("#reticle");
     const mainModel = document.querySelector("#mainModel");
     const modelShadow = document.querySelector("#modelShadow");
-    const scaleRangeEl = document.querySelector("#scale-range");
 
-    const step = 0.05;
-    let modelScale = Number(scaleRangeEl.value);
-    let yaw = 0;
+    let previewStream = null;
+    let nonXRPlacementMode = false;
+    let nonXRPointerBound = false;
+    let placeMode = false;
+
+    let currentModelScale = Number(scaleRangeEl.value);
+    let modelBaseOffset = 0;
+    const reticleSmoothPos = new THREE.Vector3();
+    let hasReticleSmoothPos = false;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
     }
 
-    function applyScale(value) {
-      modelScale = value;
-      mainModel.setAttribute("scale", `${value} ${value} ${value}`);
-      modelShadow.setAttribute("radius", Math.max(0.18, value * 0.65));
+    function isIOSDevice() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     }
 
-    function move(dx, dz) {
-      const p = modelRoot.getAttribute("position");
-      modelRoot.setAttribute("position", `${p.x + dx} ${p.y} ${p.z + dz}`);
-      setStatus("Model marker ???? ????????.");
+    function updatePlaceButton() {
+      placeToggleEl.textContent = placeMode ? "Place: ON" : "Place: OFF";
+      placeToggleEl.style.background = placeMode ? "#22c55e" : "#f59e0b";
     }
 
-    document.querySelector("#move-left").addEventListener("click", () => move(-step, 0));
-    document.querySelector("#move-right").addEventListener("click", () => move(step, 0));
-    document.querySelector("#move-forward").addEventListener("click", () => move(0, -step));
-    document.querySelector("#move-back").addEventListener("click", () => move(0, step));
+    function applyModelScale(scaleValue) {
+      currentModelScale = scaleValue;
+      mainModel.setAttribute("scale", `${scaleValue} ${scaleValue} ${scaleValue}`);
+      modelShadow.setAttribute("radius", Math.max(0.18, scaleValue * 0.65));
+    }
 
-    document.querySelector("#reset").addEventListener("click", () => {
-      modelRoot.setAttribute("position", "0 0 0");
-      yaw = 0;
-      modelRoot.setAttribute("rotation", "0 0 0");
-      setStatus("Model ??????? reset ????????.");
+    function placeModelOnSurface(surfacePos, surfaceQuat) {
+      const quat = surfaceQuat || new THREE.Quaternion(0, 0, 0, 1);
+      const lift = new THREE.Vector3(0, modelBaseOffset * currentModelScale, 0).applyQuaternion(quat);
+      const placedPos = surfacePos.clone().add(lift);
+
+      mainModel.object3D.position.copy(placedPos);
+      mainModel.object3D.quaternion.copy(quat);
+      mainModel.setAttribute("visible", true);
+
+      modelShadow.object3D.position.set(surfacePos.x, Math.max(0.01, surfacePos.y + 0.01), surfacePos.z);
+      modelShadow.setAttribute("visible", true);
+    }
+
+    function moveModelByView(forwardStep, rightStep) {
+      if (!mainModel.getAttribute("visible")) {
+        setStatus("Place model first (Place ON).");
+        return;
+      }
+
+      const cameraObj = camEl.getObject3D("camera");
+      if (!cameraObj) return;
+
+      const forward = new THREE.Vector3();
+      cameraObj.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() < 0.0001) return;
+      forward.normalize();
+
+      const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+      const delta = forward.multiplyScalar(forwardStep).add(right.multiplyScalar(rightStep));
+
+      const groundPos = modelShadow.object3D.position.clone().add(delta);
+      placeModelOnSurface(groundPos, new THREE.Quaternion(0, 0, 0, 1));
+      setStatus("Model moved. You can orbit camera freely.");
+    }
+
+    function rotateModel(deltaYawDeg) {
+      if (!mainModel.getAttribute("visible")) {
+        setStatus("Place model first (Place ON).");
+        return;
+      }
+      mainModel.object3D.rotateY(THREE.MathUtils.degToRad(deltaYawDeg));
+      setStatus("Model rotated.");
+    }
+
+    function getGroundIntersection(clientX, clientY) {
+      const cameraObj = camEl.getObject3D("camera");
+      if (!cameraObj) return null;
+
+      const ndc = new THREE.Vector2(
+        (clientX / window.innerWidth) * 2 - 1,
+        -((clientY / window.innerHeight) * 2 - 1)
+      );
+
+      const origin = new THREE.Vector3();
+      origin.setFromMatrixPosition(cameraObj.matrixWorld);
+
+      const point = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(cameraObj);
+      const direction = point.sub(origin).normalize();
+      if (Math.abs(direction.y) < 0.0001) return null;
+
+      const t = (0 - origin.y) / direction.y;
+      if (t <= 0) return null;
+
+      return origin.clone().add(direction.multiplyScalar(t));
+    }
+
+    function bindNonXRPlacementEvents() {
+      if (nonXRPointerBound) return;
+      nonXRPointerBound = true;
+
+      window.addEventListener("pointermove", (event) => {
+        if (!nonXRPlacementMode || !placeMode) return;
+
+        const hit = getGroundIntersection(event.clientX, event.clientY);
+        if (!hit) {
+          reticleEl.setAttribute("visible", false);
+          return;
+        }
+
+        reticleEl.setAttribute("visible", true);
+        if (!hasReticleSmoothPos) {
+          reticleSmoothPos.copy(hit);
+          hasReticleSmoothPos = true;
+        } else {
+          reticleSmoothPos.lerp(hit, 0.25);
+        }
+        reticleEl.object3D.position.copy(reticleSmoothPos);
+      });
+
+      window.addEventListener("pointerdown", (event) => {
+        if (!nonXRPlacementMode || !placeMode) return;
+
+        const hit = getGroundIntersection(event.clientX, event.clientY);
+        if (!hit) {
+          setStatus("No ground hit. Point camera downward and try again.");
+          return;
+        }
+
+        placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
+        placeMode = false;
+        updatePlaceButton();
+        setStatus("Model placed. Orbit around it with camera.");
+      });
+    }
+
+    function enableBrowserPreview(message) {
+      enterArBtn.style.display = "none";
+      controlsEl.style.display = "flex";
+      nonXRPlacementMode = true;
+
+      camEl.setAttribute("look-controls", "enabled:true");
+      camEl.setAttribute("wasd-controls", "enabled:false");
+
+      mainModel.setAttribute("visible", false);
+      modelShadow.setAttribute("visible", false);
+      reticleEl.setAttribute("visible", false);
+
+      placeMode = false;
+      updatePlaceButton();
+      bindNonXRPlacementEvents();
+      setStatus(message);
+    }
+
+    async function startCameraPreview() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus("Camera API not supported on this browser.");
+        return false;
+      }
+
+      try {
+        previewStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
+        cameraFeedEl.srcObject = previewStream;
+        cameraFeedEl.style.display = "block";
+        await cameraFeedEl.play();
+        return true;
+      } catch (error) {
+        setStatus(`Camera start failed: ${error.message}`);
+        return false;
+      }
+    }
+
+    AFRAME.registerComponent("ar-session-handler", {
+      init: function () {
+        this.hitTestSource = null;
+        this.referenceSpace = null;
+        this.viewerSpace = null;
+        this.renderer = null;
+        this.session = null;
+        this.hasSurface = false;
+
+        this.onSessionStart = this.onSessionStart.bind(this);
+        this.onSessionEnd = this.onSessionEnd.bind(this);
+        this.onSelect = this.onSelect.bind(this);
+
+        this.el.addEventListener("renderstart", () => {
+          this.renderer = this.el.renderer;
+          this.renderer.xr.addEventListener("sessionstart", this.onSessionStart);
+          this.renderer.xr.addEventListener("sessionend", this.onSessionEnd);
+        });
+      },
+
+      onSessionStart: async function () {
+        this.session = this.renderer.xr.getSession();
+        this.referenceSpace = this.renderer.xr.getReferenceSpace();
+        this.viewerSpace = await this.session.requestReferenceSpace("viewer");
+        this.hitTestSource = await this.session.requestHitTestSource({ space: this.viewerSpace });
+        this.session.addEventListener("select", this.onSelect);
+        setStatus("AR started. Searching for surface...");
+      },
+
+      onSessionEnd: function () {
+        if (this.hitTestSource) {
+          this.hitTestSource.cancel();
+          this.hitTestSource = null;
+        }
+        this.viewerSpace = null;
+        this.referenceSpace = null;
+        this.session = null;
+        this.hasSurface = false;
+        reticleEl.setAttribute("visible", false);
+        setStatus("AR session ended.");
+      },
+
+      onSelect: function () {
+        if (!reticleEl.getAttribute("visible")) return;
+
+        const worldPos = new THREE.Vector3();
+        const worldQuat = new THREE.Quaternion();
+        reticleEl.object3D.getWorldPosition(worldPos);
+        reticleEl.object3D.getWorldQuaternion(worldQuat);
+
+        placeModelOnSurface(worldPos, worldQuat);
+        setStatus("Model placed on detected surface.");
+      },
+
+      tick: function (time, delta, xrFrame) {
+        if (!xrFrame || !this.hitTestSource || !this.referenceSpace) return;
+
+        const hits = xrFrame.getHitTestResults(this.hitTestSource);
+        if (!hits.length) {
+          if (this.hasSurface) {
+            this.hasSurface = false;
+            setStatus("Searching for surface...");
+          }
+          reticleEl.setAttribute("visible", false);
+          return;
+        }
+
+        const pose = hits[0].getPose(this.referenceSpace);
+        if (!pose) {
+          reticleEl.setAttribute("visible", false);
+          return;
+        }
+
+        if (!this.hasSurface) {
+          this.hasSurface = true;
+          setStatus("Surface detected. Tap to place model.");
+        }
+
+        reticleEl.setAttribute("visible", true);
+        reticleEl.object3D.matrix.fromArray(pose.transform.matrix);
+        reticleEl.object3D.matrix.decompose(
+          reticleEl.object3D.position,
+          reticleEl.object3D.quaternion,
+          reticleEl.object3D.scale
+        );
+      }
+    });
+
+    if (isIOSDevice() || !navigator.xr) {
+      enterArBtn.textContent = "Start Camera Preview";
+      setStatus("WebXR not available. Start camera preview for placement mode.");
+    }
+
+    enterArBtn.addEventListener("click", async () => {
+      if (!navigator.xr) {
+        const ok = await startCameraPreview();
+        if (!ok) return;
+        enableBrowserPreview("Camera ready. Turn Place ON, tap once to place, then orbit camera.");
+        return;
+      }
+
+      try {
+        await sceneEl.enterAR();
+      } catch (error) {
+        setStatus(`Failed to start AR: ${error.message}`);
+      }
     });
 
     scaleRangeEl.addEventListener("input", () => {
-      applyScale(Number(scaleRangeEl.value));
+      applyModelScale(Number(scaleRangeEl.value));
     });
 
-    markerEl.addEventListener("markerFound", () => {
-      setStatus("Marker ?????????. ???? ?? ????? ???????? model-?? 3D ???? ?????.");
+    placeToggleEl.addEventListener("click", () => {
+      placeMode = !placeMode;
+      updatePlaceButton();
+      if (placeMode) {
+        hasReticleSmoothPos = false;
+        reticleEl.setAttribute("visible", true);
+        setStatus("Place ON. Tap screen once to set model position.");
+      } else {
+        reticleEl.setAttribute("visible", false);
+        setStatus("Place OFF. Camera orbit mode.");
+      }
     });
 
-    markerEl.addEventListener("markerLost", () => {
-      setStatus("Marker ?????????. Hiro marker-?? ????? ??????? ???? ??????? ??.");
-    });
+    nudgeLeftEl.addEventListener("click", () => moveModelByView(0, -0.08));
+    nudgeRightEl.addEventListener("click", () => moveModelByView(0, 0.08));
+    nudgeForwardEl.addEventListener("click", () => moveModelByView(0.08, 0));
+    nudgeBackEl.addEventListener("click", () => moveModelByView(-0.08, 0));
+    rotateLeftEl.addEventListener("click", () => rotateModel(-10));
+    rotateRightEl.addEventListener("click", () => rotateModel(10));
 
-    let dragging = false;
-    let prevX = 0;
-
-    window.addEventListener("pointerdown", (e) => {
-      dragging = true;
-      prevX = e.clientX;
-    });
-
-    window.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      const dx = e.clientX - prevX;
-      prevX = e.clientX;
-      yaw += dx * 0.2;
-      modelRoot.setAttribute("rotation", `0 ${yaw} 0`);
-    });
-
-    window.addEventListener("pointerup", () => {
-      dragging = false;
+    resetPlaceEl.addEventListener("click", () => {
+      mainModel.setAttribute("visible", false);
+      modelShadow.setAttribute("visible", false);
+      reticleEl.setAttribute("visible", false);
+      placeMode = false;
+      updatePlaceButton();
+      setStatus("Reset done. Turn Place ON to place again.");
     });
 
     mainModel.addEventListener("model-loaded", () => {
-      applyScale(modelScale);
-      setStatus("Model ????????. ????? ?????????? Hiro marker ??? ????????? ??.");
+      const mesh = mainModel.getObject3D("mesh");
+      if (mesh) {
+        const box = new THREE.Box3().setFromObject(mesh);
+        modelBaseOffset = Math.max(0, -box.min.y);
+      }
+      applyModelScale(currentModelScale);
+      setStatus("Model loaded.");
     });
   </script>
 </body>
