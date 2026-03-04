@@ -67,6 +67,16 @@
       cursor: pointer;
     }
 
+    #move-toggle {
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 10px;
+      background: #f59e0b;
+      color: #111827;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
     #enter-ar {
       position: fixed;
       top: 12px;
@@ -101,6 +111,7 @@
   <div id="controls">
     <label for="scale-range">Size</label>
     <input id="scale-range" type="range" min="0.2" max="1.2" step="0.05" value="0.45" />
+    <button id="move-toggle" type="button">Move: OFF</button>
     <button id="reset-place" type="button">Reset</button>
   </div>
   <div id="status">Status: Start AR дарж камер асаана. Гадаргуу илрэхээр дэлгэц дээр дарж объект байрлуулна.</div>
@@ -154,6 +165,7 @@
     const enterArBtn = document.querySelector("#enter-ar");
     const controlsEl = document.querySelector("#controls");
     const scaleRangeEl = document.querySelector("#scale-range");
+    const moveToggleEl = document.querySelector("#move-toggle");
     const resetPlaceEl = document.querySelector("#reset-place");
     const camEl = document.querySelector("#cam");
     const reticleEl = document.querySelector("#reticle");
@@ -166,9 +178,20 @@
     const reticleSmoothPos = new THREE.Vector3();
     let hasReticleSmoothPos = false;
     let modelBaseOffset = 0;
+    let modelMoveMode = false;
+    let draggingModel = false;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
+    }
+
+    function setCameraLookControls(enabled) {
+      camEl.setAttribute("look-controls", `enabled:${enabled}`);
+    }
+
+    function updateMoveButton() {
+      moveToggleEl.textContent = modelMoveMode ? "Move: ON" : "Move: OFF";
+      moveToggleEl.style.background = modelMoveMode ? "#22c55e" : "#f59e0b";
     }
 
     function isIOSDevice() {
@@ -182,7 +205,7 @@
       nonXRPlacementMode = true;
       reticleEl.setAttribute("visible", true);
 
-      camEl.setAttribute("look-controls", "enabled:true");
+      setCameraLookControls(true);
       camEl.setAttribute("wasd-controls", "enabled:false");
 
       mainModel.removeAttribute("animation__spin");
@@ -192,6 +215,8 @@
 
       setStatus(message);
       bindNonXRPlacementEvents();
+      modelMoveMode = true;
+      updateMoveButton();
     }
 
     async function startCameraPreview() {
@@ -262,6 +287,7 @@
 
       window.addEventListener("pointermove", (event) => {
         if (!nonXRPlacementMode) return;
+        if (!modelMoveMode && !draggingModel) return;
         const hit = getGroundIntersection(event.clientX, event.clientY);
         if (!hit) {
           reticleEl.setAttribute("visible", false);
@@ -276,18 +302,32 @@
           reticleSmoothPos.lerp(hit, 0.25);
         }
         reticleEl.object3D.position.copy(reticleSmoothPos);
+
+        if (draggingModel) {
+          placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
+        }
       });
 
       window.addEventListener("pointerdown", (event) => {
         if (!nonXRPlacementMode) return;
+        if (!modelMoveMode) return;
         const hit = getGroundIntersection(event.clientX, event.clientY);
         if (!hit) {
           setStatus("Гадаргуу таарсангүй. Камераа доош чиглүүлээд дахин дарна уу.");
           return;
         }
 
+        draggingModel = true;
+        setCameraLookControls(false);
         placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
-        setStatus("Объект сууриараа байрлалаа. Дахин дарж шинэ байрлалд шилжүүлж болно.");
+        setStatus("Move mode: Дэлгэц дээр чирж model-ийг зөөнө.");
+      });
+
+      window.addEventListener("pointerup", () => {
+        if (!nonXRPlacementMode || !draggingModel) return;
+        draggingModel = false;
+        setCameraLookControls(true);
+        setStatus("Model зөөгдлөө. Camera-г эргүүлж тойрч харж болно.");
       });
     }
 
@@ -394,7 +434,7 @@
         if (!cameraStarted) {
           return;
         }
-        enableBrowserPreview("Камер аслаа. Дэлгэц дээр дарж объектоо гадаргуун дээр байрлуулна.");
+        enableBrowserPreview("Камер аслаа. Move ON үед чирж model байрлуулаад, дараа нь Move OFF хийгээд тойрч харна.");
         return;
       }
 
@@ -409,10 +449,25 @@
       applyModelScale(Number(scaleRangeEl.value));
     });
 
+    moveToggleEl.addEventListener("click", () => {
+      modelMoveMode = !modelMoveMode;
+      updateMoveButton();
+
+      if (!modelMoveMode) {
+        draggingModel = false;
+        setCameraLookControls(true);
+        setStatus("Move OFF. Одоо camera-г эргүүлэхэд model байрандаа үлдэнэ.");
+        return;
+      }
+
+      reticleEl.setAttribute("visible", true);
+      setStatus("Move ON. Дэлгэц дээр дарж/чирж model-ийг шинэ байрлалд тавина.");
+    });
+
     resetPlaceEl.addEventListener("click", () => {
       mainModel.setAttribute("visible", false);
       modelShadow.setAttribute("visible", false);
-      setStatus("Байрлалыг reset хийлээ. Дахин дарж байрлуулна уу.");
+      setStatus("Reset хийлээ. Move ON асаагаад model-ээ байрлуулна уу.");
     });
 
     mainModel.addEventListener("model-loaded", () => {
