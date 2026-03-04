@@ -165,6 +165,7 @@
     let currentModelScale = Number(scaleRangeEl.value);
     const reticleSmoothPos = new THREE.Vector3();
     let hasReticleSmoothPos = false;
+    let modelBaseOffset = 0;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
@@ -243,6 +244,18 @@
       modelShadow.setAttribute("radius", shadowRadius);
     }
 
+    function placeModelOnSurface(surfacePos, surfaceQuat) {
+      const quat = surfaceQuat || new THREE.Quaternion(0, 0, 0, 1);
+      const lift = new THREE.Vector3(0, modelBaseOffset * currentModelScale, 0).applyQuaternion(quat);
+      const placedPos = surfacePos.clone().add(lift);
+
+      mainModel.object3D.position.copy(placedPos);
+      mainModel.object3D.quaternion.copy(quat);
+      mainModel.setAttribute("visible", true);
+      modelShadow.object3D.position.set(surfacePos.x, Math.max(0.01, surfacePos.y + 0.01), surfacePos.z);
+      modelShadow.setAttribute("visible", true);
+    }
+
     function bindNonXRPlacementEvents() {
       if (nonXRPointerBound) return;
       nonXRPointerBound = true;
@@ -273,12 +286,8 @@
           return;
         }
 
-        mainModel.object3D.position.copy(hit);
-        mainModel.object3D.quaternion.set(0, 0, 0, 1);
-        mainModel.setAttribute("visible", true);
-        modelShadow.object3D.position.set(hit.x, 0.01, hit.z);
-        modelShadow.setAttribute("visible", true);
-        setStatus("Объект байрлалаа. Дахин дарж шинэ байрлалд шилжүүлж болно.");
+        placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
+        setStatus("Объект сууриараа байрлалаа. Дахин дарж шинэ байрлалд шилжүүлж болно.");
       });
     }
 
@@ -334,12 +343,8 @@
         reticleEl.object3D.getWorldPosition(worldPos);
         reticleEl.object3D.getWorldQuaternion(worldQuat);
 
-        mainModel.object3D.position.copy(worldPos);
-        mainModel.object3D.quaternion.copy(worldQuat);
-        mainModel.setAttribute("visible", true);
-        modelShadow.object3D.position.set(worldPos.x, Math.max(0.01, worldPos.y - 0.02), worldPos.z);
-        modelShadow.setAttribute("visible", true);
-        setStatus("Объект байрлалаа. Дахин дарвал шинэ байрлалд шилжинэ.");
+        placeModelOnSurface(worldPos, worldQuat);
+        setStatus("Объект сууриараа байрлалаа. Дахин дарвал шинэ байрлалд шилжинэ.");
       },
 
       tick: function (time, delta, xrFrame) {
@@ -411,6 +416,11 @@
     });
 
     mainModel.addEventListener("model-loaded", () => {
+      const mesh = mainModel.getObject3D("mesh");
+      if (mesh) {
+        const box = new THREE.Box3().setFromObject(mesh);
+        modelBaseOffset = Math.max(0, -box.min.y);
+      }
       applyModelScale(currentModelScale);
       if (enterArBtn.style.display === "none") {
         setStatus("Model ачааллаа. Browser preview горим идэвхтэй.");
