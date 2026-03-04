@@ -38,6 +38,35 @@
       max-width: min(760px, 95vw);
     }
 
+    #controls {
+      position: fixed;
+      right: 12px;
+      top: 12px;
+      z-index: 20;
+      display: none;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      font-size: 13px;
+    }
+
+    #scale-range {
+      width: 120px;
+    }
+
+    #reset-place {
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 10px;
+      background: #e2e8f0;
+      color: #0f172a;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
     #enter-ar {
       position: fixed;
       top: 12px;
@@ -69,6 +98,11 @@
 <body>
   <video id="camera-feed" autoplay playsinline muted></video>
   <button id="enter-ar" type="button">Start AR</button>
+  <div id="controls">
+    <label for="scale-range">Size</label>
+    <input id="scale-range" type="range" min="0.2" max="1.2" step="0.05" value="0.45" />
+    <button id="reset-place" type="button">Reset</button>
+  </div>
   <div id="status">Status: Start AR дарж камер асаана. Гадаргуу илрэхээр дэлгэц дээр дарж объект байрлуулна.</div>
 
   <a-scene
@@ -98,8 +132,16 @@
       id="mainModel"
       src="#ekocModel"
       visible="false"
-      scale="0.3 0.3 0.3"
+      scale="0.45 0.45 0.45"
     ></a-gltf-model>
+
+    <a-circle
+      id="modelShadow"
+      visible="false"
+      rotation="-90 0 0"
+      radius="0.28"
+      material="color: #000000; opacity: 0.25; shader: flat"
+    ></a-circle>
 
     <a-light type="ambient" intensity="0.95"></a-light>
     <a-light type="directional" intensity="0.7" position="0 1 1"></a-light>
@@ -110,12 +152,19 @@
     const sceneEl = document.querySelector("#scene");
     const cameraFeedEl = document.querySelector("#camera-feed");
     const enterArBtn = document.querySelector("#enter-ar");
+    const controlsEl = document.querySelector("#controls");
+    const scaleRangeEl = document.querySelector("#scale-range");
+    const resetPlaceEl = document.querySelector("#reset-place");
     const camEl = document.querySelector("#cam");
     const reticleEl = document.querySelector("#reticle");
     const mainModel = document.querySelector("#mainModel");
+    const modelShadow = document.querySelector("#modelShadow");
     let previewStream = null;
     let nonXRPlacementMode = false;
     let nonXRPointerBound = false;
+    let currentModelScale = Number(scaleRangeEl.value);
+    const reticleSmoothPos = new THREE.Vector3();
+    let hasReticleSmoothPos = false;
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
@@ -128,6 +177,7 @@
 
     function enableBrowserPreview(message) {
       enterArBtn.style.display = "none";
+      controlsEl.style.display = "flex";
       nonXRPlacementMode = true;
       reticleEl.setAttribute("visible", true);
 
@@ -136,6 +186,7 @@
 
       mainModel.removeAttribute("animation__spin");
       mainModel.setAttribute("visible", false);
+      modelShadow.setAttribute("visible", false);
       reticleEl.setAttribute("position", "0 0 -1.5");
 
       setStatus(message);
@@ -185,6 +236,13 @@
       return origin.clone().add(direction.multiplyScalar(t));
     }
 
+    function applyModelScale(scaleValue) {
+      currentModelScale = scaleValue;
+      mainModel.setAttribute("scale", `${scaleValue} ${scaleValue} ${scaleValue}`);
+      const shadowRadius = Math.max(0.18, scaleValue * 0.65);
+      modelShadow.setAttribute("radius", shadowRadius);
+    }
+
     function bindNonXRPlacementEvents() {
       if (nonXRPointerBound) return;
       nonXRPointerBound = true;
@@ -198,7 +256,13 @@
         }
 
         reticleEl.setAttribute("visible", true);
-        reticleEl.object3D.position.copy(hit);
+        if (!hasReticleSmoothPos) {
+          reticleSmoothPos.copy(hit);
+          hasReticleSmoothPos = true;
+        } else {
+          reticleSmoothPos.lerp(hit, 0.25);
+        }
+        reticleEl.object3D.position.copy(reticleSmoothPos);
       });
 
       window.addEventListener("pointerdown", (event) => {
@@ -212,6 +276,8 @@
         mainModel.object3D.position.copy(hit);
         mainModel.object3D.quaternion.set(0, 0, 0, 1);
         mainModel.setAttribute("visible", true);
+        modelShadow.object3D.position.set(hit.x, 0.01, hit.z);
+        modelShadow.setAttribute("visible", true);
         setStatus("Объект байрлалаа. Дахин дарж шинэ байрлалд шилжүүлж болно.");
       });
     }
@@ -271,6 +337,8 @@
         mainModel.object3D.position.copy(worldPos);
         mainModel.object3D.quaternion.copy(worldQuat);
         mainModel.setAttribute("visible", true);
+        modelShadow.object3D.position.set(worldPos.x, Math.max(0.01, worldPos.y - 0.02), worldPos.z);
+        modelShadow.setAttribute("visible", true);
         setStatus("Объект байрлалаа. Дахин дарвал шинэ байрлалд шилжинэ.");
       },
 
@@ -332,7 +400,18 @@
       }
     });
 
+    scaleRangeEl.addEventListener("input", () => {
+      applyModelScale(Number(scaleRangeEl.value));
+    });
+
+    resetPlaceEl.addEventListener("click", () => {
+      mainModel.setAttribute("visible", false);
+      modelShadow.setAttribute("visible", false);
+      setStatus("Байрлалыг reset хийлээ. Дахин дарж байрлуулна уу.");
+    });
+
     mainModel.addEventListener("model-loaded", () => {
+      applyModelScale(currentModelScale);
       if (enterArBtn.style.display === "none") {
         setStatus("Model ачааллаа. Browser preview горим идэвхтэй.");
       } else {
