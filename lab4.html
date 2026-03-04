@@ -126,6 +126,11 @@
       return !!(a.relList && a.relList.supports && a.relList.supports("ar"));
     }
 
+    function isSafariBrowser() {
+      const ua = navigator.userAgent;
+      return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+    }
+
     AFRAME.registerComponent("ar-session-handler", {
       init: function () {
         this.hitTestSource = null;
@@ -209,15 +214,30 @@
       }
     });
 
+    // iPhone/iPad дээр WebXR байхгүй тул AR Quick Look товчийг урьдчилж харуулна.
+    if (isIOSDevice()) {
+      iosArLink.style.display = "inline-block";
+      if (!isSafariBrowser()) {
+        setStatus("iPhone дээр AR Quick Look ашиглахын тулд энэ хуудсыг Safari дээр нээгээд Open in iPhone AR дарна уу.");
+      } else {
+        setStatus("iPhone дээр WebXR дэмжихгүй. Open in iPhone AR товчоор AR Quick Look нээнэ үү.");
+      }
+    }
+
     enterArBtn.addEventListener("click", async () => {
       if (!navigator.xr) {
-        if (isIOSDevice() && supportsQuickLook()) {
+        if (isIOSDevice()) {
           iosArLink.style.display = "inline-block";
-          setStatus("iPhone дээр WebXR дэмжихгүй. Open in iPhone AR товчоор AR Quick Look нээнэ үү.");
+          if (!isSafariBrowser()) {
+            setStatus("Safari дээр нээгээд Open in iPhone AR дарна уу. Одоогийн browser AR Quick Look-ийг бүрэн дэмжихгүй.");
+          } else if (!supportsQuickLook()) {
+            setStatus("Safari дээр AR Quick Look шалгалт амжилтгүй байна. iOS шинэчлээд дахин оролдоно уу.");
+          } else {
+            setStatus("iPhone дээр WebXR дэмжихгүй. Open in iPhone AR товчоор AR Quick Look нээнэ үү.");
+          }
         } else {
           setStatus("Энэ төхөөрөмж WebXR AR дэмжихгүй байна.");
         }
-        enterArBtn.disabled = true;
         return;
       }
 
