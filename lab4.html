@@ -46,10 +46,28 @@
       cursor: not-allowed;
       opacity: 0.55;
     }
+
+    #ios-ar-link {
+      display: none;
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      background: #0ea5e9;
+      color: #ffffff;
+      font-weight: 700;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
   <button id="enter-ar" type="button">Start AR</button>
+  <a id="ios-ar-link" rel="ar" href="ekoc.usdz">
+    Open in iPhone AR
+  </a>
   <div id="status">Status: Start AR дарж камер асаана. Гадаргуу илрэхээр дэлгэц дээр дарж объект байрлуулна.</div>
 
   <a-scene
@@ -62,7 +80,7 @@
     ar-session-handler
   >
     <a-assets>
-      <a-asset-item id="ekocModel" src="assets/ekoc.glb"></a-asset-item>
+      <a-asset-item id="ekocModel" src="ekoc.glb"></a-asset-item>
     </a-assets>
 
     <a-camera id="cam" position="0 1.6 0" look-controls="enabled:false"></a-camera>
@@ -90,11 +108,22 @@
     const statusEl = document.querySelector("#status");
     const sceneEl = document.querySelector("#scene");
     const enterArBtn = document.querySelector("#enter-ar");
+    const iosArLink = document.querySelector("#ios-ar-link");
     const reticleEl = document.querySelector("#reticle");
     const mainModel = document.querySelector("#mainModel");
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
+    }
+
+    function isIOSDevice() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    }
+
+    function supportsQuickLook() {
+      const a = document.createElement("a");
+      return !!(a.relList && a.relList.supports && a.relList.supports("ar"));
     }
 
     AFRAME.registerComponent("ar-session-handler", {
@@ -182,7 +211,12 @@
 
     enterArBtn.addEventListener("click", async () => {
       if (!navigator.xr) {
-        setStatus("Энэ төхөөрөмж WebXR AR дэмжихгүй байна.");
+        if (isIOSDevice() && supportsQuickLook()) {
+          iosArLink.style.display = "inline-block";
+          setStatus("iPhone дээр WebXR дэмжихгүй. Open in iPhone AR товчоор AR Quick Look нээнэ үү.");
+        } else {
+          setStatus("Энэ төхөөрөмж WebXR AR дэмжихгүй байна.");
+        }
         enterArBtn.disabled = true;
         return;
       }
