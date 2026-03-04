@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lab 4 - AR Surface Placement</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
   <style>
     body {
       margin: 0;
@@ -94,6 +96,26 @@
     #scale-range {
       width: 120px;
     }
+
+    #detector-panel {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 20;
+      min-width: 220px;
+      max-width: min(92vw, 360px);
+      display: none;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      font-size: 13px;
+    }
+
+    #detector-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
   </style>
 </head>
 <body>
@@ -114,6 +136,10 @@
   </div>
 
   <div id="status">Status: Press Start AR to begin.</div>
+  <div id="detector-panel">
+    <div id="detector-title">Detected Objects</div>
+    <div id="detector-list">Waiting for camera...</div>
+  </div>
 
   <a-scene
     id="scene"
@@ -158,6 +184,8 @@
     const cameraFeedEl = document.querySelector("#camera-feed");
     const enterArBtn = document.querySelector("#enter-ar");
     const controlsEl = document.querySelector("#controls");
+    const detectorPanelEl = document.querySelector("#detector-panel");
+    const detectorListEl = document.querySelector("#detector-list");
 
     const scaleRangeEl = document.querySelector("#scale-range");
     const placeToggleEl = document.querySelector("#place-toggle");
@@ -179,6 +207,10 @@
     let nonXRPointerBound = false;
     let placeMode = false;
     let motionPermissionGranted = false;
+    let objectDetector = null;
+    let objectDetectorPromise = null;
+    let detectorRunning = false;
+    let detectLastAt = 0;
 
     let currentModelScale = Number(scaleRangeEl.value);
     let modelBaseOffset = 0;
@@ -187,6 +219,68 @@
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
+    }
+
+    function updateDetectedObjects(predictions) {
+      if (!predictions || !predictions.length) {
+        detectorListEl.textContent = "No object confidently detected.";
+        return;
+      }
+
+      const top = predictions
+        .filter((p) => p.score >= 0.55)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4);
+
+      if (!top.length) {
+        detectorListEl.textContent = "No object confidently detected.";
+        return;
+      }
+
+      detectorListEl.innerHTML = top
+        .map((p) => `${p.class} (${Math.round(p.score * 100)}%)`)
+        .join("<br>");
+    }
+
+    async function loadObjectDetector() {
+      if (objectDetector) return objectDetector;
+      if (objectDetectorPromise) return objectDetectorPromise;
+
+      if (!window.cocoSsd) {
+        throw new Error("COCO-SSD script not loaded");
+      }
+
+      detectorListEl.textContent = "Loading AI model...";
+      objectDetectorPromise = cocoSsd.load({ base: "lite_mobilenet_v2" });
+      objectDetector = await objectDetectorPromise;
+      detectorListEl.textContent = "AI model loaded. Scanning...";
+      return objectDetector;
+    }
+
+    async function runObjectDetectionLoop() {
+      if (detectorRunning) return;
+      detectorRunning = true;
+
+      const loop = async () => {
+        if (!detectorRunning) return;
+
+        if (cameraFeedEl.readyState >= 2 && objectDetector) {
+          const now = performance.now();
+          if (now - detectLastAt > 750) {
+            detectLastAt = now;
+            try {
+              const predictions = await objectDetector.detect(cameraFeedEl, 10);
+              updateDetectedObjects(predictions);
+            } catch (error) {
+              detectorListEl.textContent = `Detection error: ${error.message}`;
+            }
+          }
+        }
+
+        requestAnimationFrame(loop);
+      };
+
+      requestAnimationFrame(loop);
     }
 
     function isIOSDevice() {
@@ -332,6 +426,7 @@
     function enableBrowserPreview(message) {
       enterArBtn.style.display = "none";
       controlsEl.style.display = "flex";
+      detectorPanelEl.style.display = "block";
       nonXRPlacementMode = true;
 
       camEl.setAttribute("look-controls", "enabled:true; magicWindowTrackingEnabled:true; touchEnabled:true");
@@ -466,10 +561,17 @@
         const ok = await startCameraPreview();
         if (!ok) return;
         const motionOk = await requestMotionPermissionIfNeeded();
+        try {
+          await loadObjectDetector();
+          runObjectDetectionLoop();
+        } catch (error) {
+          detectorPanelEl.style.display = "block";
+          detectorListEl.textContent = `AI model failed: ${error.message}`;
+        }
         if (motionOk) {
-          enableBrowserPreview("Camera ready. Move phone to orbit model. Use Place ON to reposition.");
+          enableBrowserPreview("Camera ready. Move phone to orbit model. AI object detection is running.");
         } else {
-          enableBrowserPreview("Camera ready. Motion permission denied, so orbit uses touch only.");
+          enableBrowserPreview("Camera ready. Motion denied, touch orbit only. AI object detection is running.");
         }
         return;
       }
