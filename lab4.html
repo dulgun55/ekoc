@@ -212,6 +212,7 @@
     let detectorRunning = false;
     let detectLastAt = 0;
     let autoAttachToDetection = true;
+    const preferredSurfaceClasses = new Set(["dining table", "chair", "bench", "couch"]);
 
     let currentModelScale = Number(scaleRangeEl.value);
     let modelBaseOffset = 0;
@@ -243,8 +244,14 @@
         .join("<br>");
 
       if (autoAttachToDetection) {
-        attachModelToPrediction(top[0]);
+        const surfaceCandidate = pickSurfaceCandidate(top);
+        attachModelToPrediction(surfaceCandidate || top[0]);
       }
+    }
+
+    function pickSurfaceCandidate(predictions) {
+      if (!predictions || !predictions.length) return null;
+      return predictions.find((p) => preferredSurfaceClasses.has(p.class)) || null;
     }
 
     function estimateWorldPointFromScreen(screenX, screenY) {
@@ -314,7 +321,11 @@
       if (!worldPos) return;
 
       placeModelOnSurface(worldPos, new THREE.Quaternion(0, 0, 0, 1));
-      setStatus(`Attached to detected ${prediction.class}.`);
+      if (preferredSurfaceClasses.has(prediction.class)) {
+        setStatus(`Attached on detected surface: ${prediction.class}.`);
+      } else {
+        setStatus(`Attached to detected ${prediction.class}.`);
+      }
     }
 
     async function loadObjectDetector() {
