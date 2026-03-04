@@ -97,6 +97,43 @@
       width: 120px;
     }
 
+    #model-select {
+      margin-left: 6px;
+      border-radius: 6px;
+      border: 1px solid #94a3b8;
+      background: #f8fafc;
+      color: #0f172a;
+      padding: 3px 6px;
+      font-size: 13px;
+    }
+
+    #pre-ar-guide {
+      position: fixed;
+      left: 12px;
+      top: 60px;
+      z-index: 20;
+      max-width: min(92vw, 540px);
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    #pre-ar-guide strong {
+      display: inline-block;
+      margin-bottom: 2px;
+    }
+
+    #ios-quicklook-link {
+      display: inline-block;
+      margin-top: 6px;
+      color: #86efac;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
     #detector-panel {
       position: fixed;
       right: 12px;
@@ -121,6 +158,18 @@
 <body>
   <video id="camera-feed" autoplay playsinline muted></video>
   <button id="enter-ar" type="button">Start AR</button>
+  <div id="pre-ar-guide">
+    <div>
+      <label for="model-select">Model:</label>
+      <select id="model-select">
+        <option value="model_a" selected>Model A</option>
+        <option value="model_b">Model B</option>
+      </select>
+    </div>
+    <div><strong>Android (WebXR):</strong> Chrome ашиглаад Start AR дарж гадаргуу илрүүлээд байрлуулна.</div>
+    <div><strong>iOS (Safari):</strong> Start Camera Preview ашиглана. WebXR дэмжихгүй бол AI + placement mode ажиллана.</div>
+    <a id="ios-quicklook-link" rel="ar" href="ekoc.usdz">iOS Quick Look (.usdz) нээх</a>
+  </div>
 
   <div id="controls">
     <label for="scale-range">Size</label>
@@ -151,7 +200,8 @@
     ar-session-handler
   >
     <a-assets>
-      <a-asset-item id="ekocModel" src="ekoc.glb"></a-asset-item>
+      <a-asset-item id="ekocModelA" src="ekoc.glb"></a-asset-item>
+      <a-asset-item id="ekocModelB" src="ekoc_alt.glb"></a-asset-item>
     </a-assets>
 
     <a-camera id="cam" position="0 1.6 0" look-controls="enabled:false"></a-camera>
@@ -164,7 +214,7 @@
       rotation="-90 0 0"
     ></a-entity>
 
-    <a-gltf-model id="mainModel" src="#ekocModel" visible="false" scale="0.45 0.45 0.45"></a-gltf-model>
+    <a-gltf-model id="mainModel" src="#ekocModelA" visible="false" scale="0.45 0.45 0.45"></a-gltf-model>
 
     <a-circle
       id="modelShadow"
@@ -183,10 +233,13 @@
     const sceneEl = document.querySelector("#scene");
     const cameraFeedEl = document.querySelector("#camera-feed");
     const enterArBtn = document.querySelector("#enter-ar");
+    const preArGuideEl = document.querySelector("#pre-ar-guide");
+    const iosQuickLookLinkEl = document.querySelector("#ios-quicklook-link");
     const controlsEl = document.querySelector("#controls");
     const detectorPanelEl = document.querySelector("#detector-panel");
     const detectorListEl = document.querySelector("#detector-list");
 
+    const modelSelectEl = document.querySelector("#model-select");
     const scaleRangeEl = document.querySelector("#scale-range");
     const placeToggleEl = document.querySelector("#place-toggle");
     const nudgeLeftEl = document.querySelector("#nudge-left");
@@ -228,9 +281,24 @@
     let modelBaseOffset = 0;
     const reticleSmoothPos = new THREE.Vector3();
     let hasReticleSmoothPos = false;
+    const modelConfig = {
+      model_a: { glb: "#ekocModelA", usdz: "ekoc.usdz", label: "Model A" },
+      model_b: { glb: "#ekocModelB", usdz: "ekoc_alt.usdz", label: "Model B" }
+    };
 
     function setStatus(text) {
       statusEl.textContent = `Status: ${text}`;
+    }
+
+    function applySelectedModel(modelKey) {
+      const selected = modelConfig[modelKey] || modelConfig.model_a;
+      mainModel.setAttribute("src", selected.glb);
+      mainModel.setAttribute("visible", false);
+      modelShadow.setAttribute("visible", false);
+      iosQuickLookLinkEl.setAttribute("href", selected.usdz);
+      detectionAnchorLocked = false;
+      autoAttachToDetection = true;
+      setStatus(`${selected.label} selected. Place again or wait for detection.`);
     }
 
     function updateDetectedObjects(predictions) {
@@ -525,6 +593,7 @@
 
     function enableBrowserPreview(message) {
       enterArBtn.style.display = "none";
+      preArGuideEl.style.display = "none";
       controlsEl.style.display = "flex";
       detectorPanelEl.style.display = "block";
       nonXRPlacementMode = true;
@@ -687,6 +756,10 @@
       applyModelScale(Number(scaleRangeEl.value));
     });
 
+    modelSelectEl.addEventListener("change", () => {
+      applySelectedModel(modelSelectEl.value);
+    });
+
     placeToggleEl.addEventListener("click", () => {
       placeMode = !placeMode;
       updatePlaceButton();
@@ -726,7 +799,8 @@
         modelBaseOffset = Math.max(0, -box.min.y);
       }
       applyModelScale(currentModelScale);
-      setStatus("Model loaded.");
+      const selected = modelConfig[modelSelectEl.value] || modelConfig.model_a;
+      setStatus(`${selected.label} loaded.`);
     });
   </script>
 </body>
