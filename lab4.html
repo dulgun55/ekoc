@@ -213,7 +213,16 @@
     let detectLastAt = 0;
     let autoAttachToDetection = true;
     let detectionAnchorLocked = false;
-    const preferredSurfaceClasses = new Set(["dining table", "chair", "bench", "couch"]);
+    const preferredSurfaceClasses = new Set([
+      "dining table",
+      "chair",
+      "bench",
+      "couch",
+      "book",
+      "laptop",
+      "keyboard",
+      "cell phone"
+    ]);
 
     let currentModelScale = Number(scaleRangeEl.value);
     let modelBaseOffset = 0;
@@ -246,7 +255,11 @@
 
       if (autoAttachToDetection && !detectionAnchorLocked && !placeMode) {
         const surfaceCandidate = pickSurfaceCandidate(top);
-        attachModelToPrediction(surfaceCandidate || top[0]);
+        if (surfaceCandidate) {
+          attachModelToPrediction(surfaceCandidate);
+        } else {
+          setStatus("Surface object not detected yet. Try table/chair/book.");
+        }
       }
     }
 
@@ -255,7 +268,7 @@
       return predictions.find((p) => preferredSurfaceClasses.has(p.class)) || null;
     }
 
-    function estimateWorldPointFromScreen(screenX, screenY) {
+    function estimateWorldPointFromScreen(screenX, screenY, expectedDistance = 1.2) {
       const cameraObj = camEl.getObject3D("camera");
       if (!cameraObj) return null;
 
@@ -269,15 +282,8 @@
 
       const point = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(cameraObj);
       const direction = point.sub(origin).normalize();
-
-      if (Math.abs(direction.y) > 0.0001) {
-        const tGround = (0 - origin.y) / direction.y;
-        if (tGround > 0) {
-          return origin.clone().add(direction.multiplyScalar(tGround));
-        }
-      }
-
-      return origin.add(direction.multiplyScalar(1.2));
+      const distance = Math.max(0.4, Math.min(2.8, expectedDistance));
+      return origin.add(direction.multiplyScalar(distance));
     }
 
     function attachModelToPrediction(prediction) {
@@ -286,7 +292,8 @@
 
       const [x, y, width, height] = prediction.bbox;
       const centerVideoX = x + width * 0.5;
-      const centerVideoY = y + height * 0.9;
+      const anchorYRatio = prediction.class === "dining table" ? 0.42 : 0.5;
+      const centerVideoY = y + height * anchorYRatio;
 
       const viewW = cameraFeedEl.clientWidth || window.innerWidth;
       const viewH = cameraFeedEl.clientHeight || window.innerHeight;
@@ -318,16 +325,14 @@
 
       const centerX = offsetX + centerVideoX * scale;
       const centerY = offsetY + centerVideoY * scale;
-      const worldPos = estimateWorldPointFromScreen(centerX, centerY);
+      const normalizedHeight = Math.max(0.05, Math.min(0.95, height / videoH));
+      const estimatedDistance = 2.8 - normalizedHeight * 2.2;
+      const worldPos = estimateWorldPointFromScreen(centerX, centerY, estimatedDistance);
       if (!worldPos) return;
 
-      placeModelOnSurface(worldPos, new THREE.Quaternion(0, 0, 0, 1), true);
+      placeModelOnSurface(worldPos, new THREE.Quaternion(0, 0, 0, 1), false);
       detectionAnchorLocked = true;
-      if (preferredSurfaceClasses.has(prediction.class)) {
-        setStatus(`Locked on detected surface: ${prediction.class}.`);
-      } else {
-        setStatus(`Locked to detected ${prediction.class}.`);
-      }
+      setStatus(`Locked on detected surface: ${prediction.class}.`);
     }
 
     async function loadObjectDetector() {
