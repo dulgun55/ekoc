@@ -127,11 +127,22 @@
     }
 
     #ios-quicklook-link {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       margin-top: 6px;
       color: #86efac;
       font-weight: 700;
       text-decoration: none;
+    }
+
+    #ios-quicklook-thumb {
+      width: 68px;
+      height: 40px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      object-fit: cover;
+      background: #111827;
     }
 
     #detector-panel {
@@ -168,7 +179,14 @@
     </div>
     <div><strong>Android (WebXR):</strong> Chrome ашиглаад Start AR дарж гадаргуу илрүүлээд байрлуулна.</div>
     <div><strong>iOS (Safari):</strong> Start Camera Preview ашиглана. WebXR дэмжихгүй бол AI + placement mode ажиллана.</div>
-    <a id="ios-quicklook-link" rel="ar" href="ekoc.usdz">iOS Quick Look (.usdz) нээх</a>
+    <a id="ios-quicklook-link" rel="ar" href="ekoc.usdz">
+      <img
+        id="ios-quicklook-thumb"
+        alt="AR Quick Look preview"
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='136' height='80'%3E%3Crect width='136' height='80' fill='%230f172a'/%3E%3Ctext x='50%25' y='53%25' dominant-baseline='middle' text-anchor='middle' fill='%23e2e8f0' font-family='Arial' font-size='14'%3EAR Quick Look%3C/text%3E%3C/svg%3E"
+      />
+      <span id="ios-quicklook-text">iOS Quick Look (.usdz) нээх</span>
+    </a>
   </div>
 
   <div id="controls">
@@ -235,6 +253,7 @@
     const enterArBtn = document.querySelector("#enter-ar");
     const preArGuideEl = document.querySelector("#pre-ar-guide");
     const iosQuickLookLinkEl = document.querySelector("#ios-quicklook-link");
+    const iosQuickLookTextEl = document.querySelector("#ios-quicklook-text");
     const controlsEl = document.querySelector("#controls");
     const detectorPanelEl = document.querySelector("#detector-panel");
     const detectorListEl = document.querySelector("#detector-list");
@@ -296,6 +315,7 @@
       mainModel.setAttribute("visible", false);
       modelShadow.setAttribute("visible", false);
       iosQuickLookLinkEl.setAttribute("href", selected.usdz);
+      iosQuickLookTextEl.textContent = `${selected.label} - iOS Quick Look (.usdz) нээх`;
       detectionAnchorLocked = false;
       autoAttachToDetection = true;
       setStatus(`${selected.label} selected. Place again or wait for detection.`);
@@ -724,6 +744,10 @@
       enterArBtn.textContent = "Start Camera Preview";
       setStatus("WebXR not available. Start camera preview for placement mode.");
     }
+
+    iosQuickLookLinkEl.addEventListener("click", () => {
+      setStatus("Opening iOS Quick Look... If it does not open, use Safari and tap again.");
+    });
 
     enterArBtn.addEventListener("click", async () => {
       if (!navigator.xr) {
