@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>WebAR Lab - Model Viewer</title>
 <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-<link rel="preload" href="assets/water1.glb" as="fetch" type="model/gltf-binary" crossorigin />
+<link rel="preload" href="assets/water1-opt.glb" as="fetch" type="model/gltf-binary" crossorigin />
 <style>
   :root {
     --bg: #eef3f8;
@@ -152,7 +152,7 @@
 
     const config = {
       a: { glb: "assets/model-a.glb", usdz: "assets/model-a.usdz" },
-      b: { glb: "assets/water1.glb", usdz: "ekocc.usdz" }
+      b: { glb: "assets/water1-opt.glb", usdz: "assets/model-b.usdz" }
     };
 
     function applyModel(key) {
@@ -166,7 +166,7 @@
 
     async function warmupModelB() {
       try {
-        await fetch("assets/water1.glb", { cache: "force-cache" });
+        await fetch("assets/water1-opt.glb", { cache: "force-cache" });
         loadState.textContent = "Model B cache warm-up: ready";
       } catch {
         loadState.textContent = "Model B cache warm-up: skipped";
