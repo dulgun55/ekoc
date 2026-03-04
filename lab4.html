@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>WebAR Lab - Model Viewer</title>
 <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+<link rel="preload" href="assets/water1.glb" as="fetch" type="model/gltf-binary" crossorigin />
 <style>
   :root {
     --bg: #eef3f8;
@@ -92,6 +93,12 @@
     font-size: 12px;
     color: #1f2937;
   }
+
+  #loadState {
+    margin: 0;
+    font-size: 12px;
+    color: #2563eb;
+  }
 </style>
 </head>
 <body>
@@ -116,6 +123,7 @@
     <p class="proof">
       iOS Quick Look ????????: Safari ???? ????? Quick Look ??????? ???? AR ?????????? screenshot/video-? ????????? ??????????.
     </p>
+    <p id="loadState">Model B cache warm-up: pending...</p>
   </section>
 
   <model-viewer
@@ -139,6 +147,7 @@
     const quickLookLink = document.querySelector("#quickLookLink");
     const toggleRotate = document.querySelector("#toggleRotate");
     const togglePerf = document.querySelector("#togglePerf");
+    const loadState = document.querySelector("#loadState");
     let performanceMode = true;
 
     const config = {
@@ -154,6 +163,15 @@
     }
 
     modelSelect.addEventListener("change", () => applyModel(modelSelect.value));
+
+    async function warmupModelB() {
+      try {
+        await fetch("assets/water1.glb", { cache: "force-cache" });
+        loadState.textContent = "Model B cache warm-up: ready";
+      } catch {
+        loadState.textContent = "Model B cache warm-up: skipped";
+      }
+    }
 
     toggleRotate.addEventListener("click", () => {
       if (mv.hasAttribute("auto-rotate")) {
@@ -179,6 +197,12 @@
         togglePerf.textContent = "Performance: OFF";
       }
     });
+
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(warmupModelB);
+    } else {
+      setTimeout(warmupModelB, 800);
+    }
   </script>
 </body>
 </html>
