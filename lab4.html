@@ -215,7 +215,7 @@
 
       setStatus(message);
       bindNonXRPlacementEvents();
-      modelMoveMode = true;
+      modelMoveMode = false;
       updateMoveButton();
     }
 
@@ -327,7 +327,9 @@
         if (!nonXRPlacementMode || !draggingModel) return;
         draggingModel = false;
         setCameraLookControls(true);
-        setStatus("Model зөөгдлөө. Camera-г эргүүлж тойрч харж болно.");
+        modelMoveMode = false;
+        updateMoveButton();
+        setStatus("Model зөөгдлөө. Move OFF боллоо, одоо camera-г эргүүлж тойрч харж болно.");
       });
     }
 
@@ -434,7 +436,7 @@
         if (!cameraStarted) {
           return;
         }
-        enableBrowserPreview("Камер аслаа. Move ON үед чирж model байрлуулаад, дараа нь Move OFF хийгээд тойрч харна.");
+        enableBrowserPreview("Камер аслаа. Эхлээд Move ON дарж model-ээ байрлуулаад, дараа нь camera-г эргүүлж тойрч харна.");
         return;
       }
 
