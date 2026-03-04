@@ -39,20 +39,15 @@
     }
 
     #quicklook-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
+      display: inline-block;
       border-radius: 10px;
-      background: #22c55e;
-      color: #04130a;
-      font-weight: 700;
-      text-decoration: none;
+      border: 2px solid #22c55e;
+      padding: 6px;
     }
 
     #quicklook-thumb {
-      width: 56px;
-      height: 36px;
+      width: 220px;
+      height: 128px;
       border-radius: 6px;
       border: 1px solid rgba(0, 0, 0, 0.25);
       object-fit: cover;
@@ -64,12 +59,27 @@
       font-size: 12px;
       color: #94a3b8;
     }
+
+    #open-text {
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #86efac;
+    }
+
+    #fallback-link {
+      display: inline-block;
+      margin-top: 8px;
+      color: #93c5fd;
+      text-decoration: underline;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>AR Quick Look</h1>
-    <p>iPhone Safari ???? ????? ??????? ???? 3D model-?? AR ???? ?????.</p>
+    <p>iPhone Safari дээр доорх preview зураг дээр дарж AR нээнэ.</p>
 
     <a id="quicklook-link" rel="ar" href="ekoc.usdz">
       <img
@@ -77,10 +87,20 @@
         alt="AR preview"
         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='112' height='72'%3E%3Crect width='112' height='72' fill='%23111827'/%3E%3Ctext x='50%25' y='53%25' dominant-baseline='middle' text-anchor='middle' fill='%23e2e8f0' font-family='Arial' font-size='12'%3EAR Model%3C/text%3E%3C/svg%3E"
       />
-      <span>AR-? ????</span>
     </a>
+    <div id="open-text">Tap image to open AR</div>
+    <a id="fallback-link" href="ekoc.usdz">Fallback: Open USDZ file</a>
 
-    <div class="hint">????? ?????????? ??? Safari ??????? ?????? ?????? ??????? ??.</div>
+    <div class="hint">Хэрэв нээгдэхгүй бол Safari ашиглаж байгаа эсэхээ шалгаад дахин дарна уу.</div>
   </div>
+  <script>
+    const hintEl = document.querySelector(".hint");
+    const ua = navigator.userAgent || "";
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+    if (!isIOS || !isSafari) {
+      hintEl.textContent = "AR Quick Look ихэвчлэн iPhone Safari дээр нээгдэнэ.";
+    }
+  </script>
 </body>
 </html>
