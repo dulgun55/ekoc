@@ -178,6 +178,7 @@
     let nonXRPlacementMode = false;
     let nonXRPointerBound = false;
     let placeMode = false;
+    let motionPermissionGranted = false;
 
     let currentModelScale = Number(scaleRangeEl.value);
     let modelBaseOffset = 0;
@@ -202,6 +203,24 @@
       currentModelScale = scaleValue;
       mainModel.setAttribute("scale", `${scaleValue} ${scaleValue} ${scaleValue}`);
       modelShadow.setAttribute("radius", Math.max(0.18, scaleValue * 0.65));
+    }
+
+    async function requestMotionPermissionIfNeeded() {
+      try {
+        if (
+          typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function"
+        ) {
+          const result = await DeviceOrientationEvent.requestPermission();
+          motionPermissionGranted = result === "granted";
+          return motionPermissionGranted;
+        }
+        motionPermissionGranted = true;
+        return true;
+      } catch (error) {
+        motionPermissionGranted = false;
+        return false;
+      }
     }
 
     function placeModelOnSurface(surfacePos, surfaceQuat) {
@@ -315,7 +334,7 @@
       controlsEl.style.display = "flex";
       nonXRPlacementMode = true;
 
-      camEl.setAttribute("look-controls", "enabled:true");
+      camEl.setAttribute("look-controls", "enabled:true; magicWindowTrackingEnabled:true; touchEnabled:true");
       camEl.setAttribute("wasd-controls", "enabled:false");
 
       mainModel.setAttribute("visible", false);
@@ -446,7 +465,12 @@
       if (!navigator.xr) {
         const ok = await startCameraPreview();
         if (!ok) return;
-        enableBrowserPreview("Camera ready. Turn Place ON, tap once to place, then orbit camera.");
+        const motionOk = await requestMotionPermissionIfNeeded();
+        if (motionOk) {
+          enableBrowserPreview("Camera ready. Move phone to orbit model. Use Place ON to reposition.");
+        } else {
+          enableBrowserPreview("Camera ready. Motion permission denied, so orbit uses touch only.");
+        }
         return;
       }
 
