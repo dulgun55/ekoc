@@ -212,6 +212,7 @@
     let detectorRunning = false;
     let detectLastAt = 0;
     let autoAttachToDetection = true;
+    let detectionAnchorLocked = false;
     const preferredSurfaceClasses = new Set(["dining table", "chair", "bench", "couch"]);
 
     let currentModelScale = Number(scaleRangeEl.value);
@@ -243,7 +244,7 @@
         .map((p) => `${p.class} (${Math.round(p.score * 100)}%)`)
         .join("<br>");
 
-      if (autoAttachToDetection) {
+      if (autoAttachToDetection && !detectionAnchorLocked && !placeMode) {
         const surfaceCandidate = pickSurfaceCandidate(top);
         attachModelToPrediction(surfaceCandidate || top[0]);
       }
@@ -285,7 +286,7 @@
 
       const [x, y, width, height] = prediction.bbox;
       const centerVideoX = x + width * 0.5;
-      const centerVideoY = y + height * 0.5;
+      const centerVideoY = y + height * 0.9;
 
       const viewW = cameraFeedEl.clientWidth || window.innerWidth;
       const viewH = cameraFeedEl.clientHeight || window.innerHeight;
@@ -320,11 +321,12 @@
       const worldPos = estimateWorldPointFromScreen(centerX, centerY);
       if (!worldPos) return;
 
-      placeModelOnSurface(worldPos, new THREE.Quaternion(0, 0, 0, 1));
+      placeModelOnSurface(worldPos, new THREE.Quaternion(0, 0, 0, 1), true);
+      detectionAnchorLocked = true;
       if (preferredSurfaceClasses.has(prediction.class)) {
-        setStatus(`Attached on detected surface: ${prediction.class}.`);
+        setStatus(`Locked on detected surface: ${prediction.class}.`);
       } else {
-        setStatus(`Attached to detected ${prediction.class}.`);
+        setStatus(`Locked to detected ${prediction.class}.`);
       }
     }
 
@@ -403,16 +405,21 @@
       }
     }
 
-    function placeModelOnSurface(surfacePos, surfaceQuat) {
+    function placeModelOnSurface(surfacePos, surfaceQuat, forceFlatGround = false) {
       const quat = surfaceQuat || new THREE.Quaternion(0, 0, 0, 1);
+      const basePos = surfacePos.clone();
+      if (forceFlatGround) {
+        basePos.y = 0;
+      }
+
       const lift = new THREE.Vector3(0, modelBaseOffset * currentModelScale, 0).applyQuaternion(quat);
-      const placedPos = surfacePos.clone().add(lift);
+      const placedPos = basePos.clone().add(lift);
 
       mainModel.object3D.position.copy(placedPos);
       mainModel.object3D.quaternion.copy(quat);
       mainModel.setAttribute("visible", true);
 
-      modelShadow.object3D.position.set(surfacePos.x, Math.max(0.01, surfacePos.y + 0.01), surfacePos.z);
+      modelShadow.object3D.position.set(basePos.x, Math.max(0.01, basePos.y + 0.01), basePos.z);
       modelShadow.setAttribute("visible", true);
     }
 
@@ -435,7 +442,7 @@
       const delta = forward.multiplyScalar(forwardStep).add(right.multiplyScalar(rightStep));
 
       const groundPos = modelShadow.object3D.position.clone().add(delta);
-      placeModelOnSurface(groundPos, new THREE.Quaternion(0, 0, 0, 1));
+      placeModelOnSurface(groundPos, new THREE.Quaternion(0, 0, 0, 1), true);
       setStatus("Model moved. You can orbit camera freely.");
     }
 
@@ -502,10 +509,12 @@
           return;
         }
 
-        placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1));
+        placeModelOnSurface(hit, new THREE.Quaternion(0, 0, 0, 1), true);
+        detectionAnchorLocked = true;
+        autoAttachToDetection = false;
         placeMode = false;
         updatePlaceButton();
-        setStatus("Model placed. Orbit around it with camera.");
+        setStatus("Model placed and locked. Orbit around it with camera.");
       });
     }
 
@@ -677,6 +686,7 @@
       placeMode = !placeMode;
       updatePlaceButton();
       if (placeMode) {
+        autoAttachToDetection = false;
         hasReticleSmoothPos = false;
         reticleEl.setAttribute("visible", true);
         setStatus("Place ON. Tap screen once to set model position.");
@@ -698,8 +708,10 @@
       modelShadow.setAttribute("visible", false);
       reticleEl.setAttribute("visible", false);
       placeMode = false;
+      detectionAnchorLocked = false;
+      autoAttachToDetection = true;
       updatePlaceButton();
-      setStatus("Reset done. Turn Place ON to place again.");
+      setStatus("Reset done. AI auto-attach re-enabled.");
     });
 
     mainModel.addEventListener("model-loaded", () => {
